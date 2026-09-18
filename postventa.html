@@ -1,0 +1,1320 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>BDC Postventa - Segmentos y citas Dynamics</title>
+  <style>
+    :root { color-scheme: light dark; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      padding: 24px;
+      background: light-dark(#e9edf3, #111315);
+      font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .page-shell {
+      max-width: 1440px;
+      margin: 0 auto;
+    }
+    @media (max-width: 720px) {
+      body { padding: 12px; }
+    }
+  </style>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+  <main class="page-shell">
+<div id="bdc-cdk-dynamics-ui" aria-label="Propuesta UI BDC Postventa basada en operación CDK">
+  <style>
+    #bdc-cdk-dynamics-ui {
+      --bdc-bg: light-dark(#f3f4f7, #15171a);
+      --bdc-shell: light-dark(#ffffff, #1f2328);
+      --bdc-surface: light-dark(#ffffff, #242932);
+      --bdc-soft: light-dark(#f8fafc, #1c2128);
+      --bdc-line: light-dark(#dbe1ea, #3a424d);
+      --bdc-text: light-dark(#07152b, #f3f6fa);
+      --bdc-muted: light-dark(#5d6b80, #aeb9c8);
+      --bdc-red: light-dark(#d40000, #ff6b6b);
+      --bdc-red-soft: light-dark(#fff0f0, #391717);
+      --bdc-blue: light-dark(#2368d9, #8db7ff);
+      --bdc-blue-soft: light-dark(#edf4ff, #162945);
+      --bdc-green: light-dark(#15803d, #6ee7a5);
+      --bdc-green-soft: light-dark(#ecfdf3, #133221);
+      --bdc-amber: light-dark(#b35c00, #ffc875);
+      --bdc-amber-soft: light-dark(#fff7e8, #3a2810);
+      --bdc-purple: light-dark(#7c3aed, #c4a4ff);
+      --bdc-purple-soft: light-dark(#f4efff, #2b1d46);
+      --bdc-shadow: light-dark(0 14px 34px rgba(15, 23, 42, .10), 0 14px 34px rgba(0, 0, 0, .24));
+      color: var(--bdc-text);
+      font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: transparent;
+    }
+
+    #bdc-cdk-dynamics-ui * {
+      box-sizing: border-box;
+    }
+
+    #bdc-cdk-dynamics-ui button,
+    #bdc-cdk-dynamics-ui input,
+    #bdc-cdk-dynamics-ui select,
+    #bdc-cdk-dynamics-ui textarea {
+      font: inherit;
+    }
+
+    #bdc-cdk-dynamics-ui button {
+      cursor: pointer;
+    }
+
+    #bdc-cdk-dynamics-ui .app {
+      min-height: 780px;
+      background: var(--bdc-bg);
+      border: 1px solid var(--bdc-line);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: var(--bdc-shadow);
+    }
+
+    #bdc-cdk-dynamics-ui .topline {
+      height: 4px;
+      background: var(--bdc-red);
+    }
+
+    #bdc-cdk-dynamics-ui .shell {
+      display: grid;
+      grid-template-columns: 250px minmax(0, 1fr);
+      min-height: 776px;
+    }
+
+    #bdc-cdk-dynamics-ui .sidebar {
+      background: var(--bdc-shell);
+      border-right: 1px solid var(--bdc-line);
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    #bdc-cdk-dynamics-ui .brand {
+      padding: 18px 18px 14px;
+      border-bottom: 1px solid var(--bdc-line);
+    }
+
+    #bdc-cdk-dynamics-ui .brand strong,
+    #bdc-cdk-dynamics-ui .page-title,
+    #bdc-cdk-dynamics-ui h2,
+    #bdc-cdk-dynamics-ui h3 {
+      font-weight: 500;
+    }
+
+    #bdc-cdk-dynamics-ui .brand span,
+    #bdc-cdk-dynamics-ui .muted,
+    #bdc-cdk-dynamics-ui .screen-note,
+    #bdc-cdk-dynamics-ui .field-label,
+    #bdc-cdk-dynamics-ui .nav-section {
+      color: var(--bdc-muted);
+    }
+
+    #bdc-cdk-dynamics-ui .brand span {
+      display: block;
+      margin-top: 2px;
+    }
+
+    #bdc-cdk-dynamics-ui .nav-scroll {
+      padding: 12px 10px 18px;
+      overflow: auto;
+    }
+
+    #bdc-cdk-dynamics-ui .nav-section {
+      margin: 12px 8px 7px;
+      font-size: .78em;
+      text-transform: uppercase;
+      letter-spacing: .02em;
+    }
+
+    #bdc-cdk-dynamics-ui .nav-item {
+      width: 100%;
+      min-height: 37px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--bdc-text);
+      display: grid;
+      grid-template-columns: 20px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 10px;
+      text-align: left;
+    }
+
+    #bdc-cdk-dynamics-ui .nav-item.is-active {
+      background: var(--bdc-red);
+      color: light-dark(#ffffff, #1a0808);
+    }
+
+    #bdc-cdk-dynamics-ui .nav-item svg {
+      width: 15px;
+      height: 15px;
+    }
+
+    #bdc-cdk-dynamics-ui .nav-item .count,
+    #bdc-cdk-dynamics-ui .small-pill {
+      min-width: 24px;
+      min-height: 20px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px 7px;
+      background: var(--bdc-soft);
+      color: var(--bdc-muted);
+      font-size: .82em;
+    }
+
+    #bdc-cdk-dynamics-ui .nav-item.is-active .count {
+      background: rgba(255, 255, 255, .18);
+      color: currentColor;
+    }
+
+    #bdc-cdk-dynamics-ui .priority-dot {
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      display: inline-grid;
+      place-items: center;
+      font-size: .8em;
+      font-weight: 500;
+      color: light-dark(#451313, #1a0808);
+      background: #ffaaaa;
+    }
+
+    #bdc-cdk-dynamics-ui .priority-dot.p2 {
+      background: #ffc078;
+    }
+
+    #bdc-cdk-dynamics-ui .priority-dot.p3 {
+      background: #f4d46a;
+    }
+
+    #bdc-cdk-dynamics-ui .priority-dot.p4 {
+      background: #d7dde8;
+    }
+
+    #bdc-cdk-dynamics-ui .priority-dot.p5 {
+      background: #a8ddb2;
+    }
+
+    #bdc-cdk-dynamics-ui .content {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #bdc-cdk-dynamics-ui .topbar {
+      background: var(--bdc-shell);
+      border-bottom: 1px solid var(--bdc-line);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    #bdc-cdk-dynamics-ui .page-title {
+      font-size: 1.15em;
+    }
+
+    #bdc-cdk-dynamics-ui .top-actions,
+    #bdc-cdk-dynamics-ui .row-actions,
+    #bdc-cdk-dynamics-ui .chips,
+    #bdc-cdk-dynamics-ui .screen-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    #bdc-cdk-dynamics-ui .agent-badge {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: var(--bdc-red);
+      color: light-dark(#ffffff, #1a0808);
+      font-weight: 500;
+    }
+
+    #bdc-cdk-dynamics-ui .status-select,
+    #bdc-cdk-dynamics-ui .agency-select,
+    #bdc-cdk-dynamics-ui .field,
+    #bdc-cdk-dynamics-ui textarea,
+    #bdc-cdk-dynamics-ui select {
+      border: 1px solid var(--bdc-line);
+      border-radius: 8px;
+      color: var(--bdc-text);
+      background: var(--bdc-surface);
+      min-height: 36px;
+      padding: 7px 10px;
+    }
+
+    #bdc-cdk-dynamics-ui .status-select {
+      background: var(--bdc-green-soft);
+      border-color: light-dark(#b9efca, #25573c);
+      color: var(--bdc-green);
+      font-weight: 500;
+    }
+
+    #bdc-cdk-dynamics-ui .agency-select {
+      min-width: 230px;
+    }
+
+    #bdc-cdk-dynamics-ui .tabs {
+      background: var(--bdc-shell);
+      border-bottom: 1px solid var(--bdc-line);
+      padding: 0 16px;
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
+    }
+
+    #bdc-cdk-dynamics-ui .tab {
+      border: 0;
+      border-bottom: 3px solid transparent;
+      background: transparent;
+      color: var(--bdc-muted);
+      min-height: 42px;
+      padding: 8px 10px;
+      white-space: nowrap;
+    }
+
+    #bdc-cdk-dynamics-ui .tab[aria-selected="true"] {
+      color: var(--bdc-red);
+      border-bottom-color: var(--bdc-red);
+      font-weight: 500;
+    }
+
+    #bdc-cdk-dynamics-ui .screen {
+      padding: 18px 18px 24px;
+      display: grid;
+      gap: 14px;
+    }
+
+    #bdc-cdk-dynamics-ui .screen[hidden] {
+      display: none;
+    }
+
+    #bdc-cdk-dynamics-ui .screen-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    #bdc-cdk-dynamics-ui h2,
+    #bdc-cdk-dynamics-ui h3,
+    #bdc-cdk-dynamics-ui p {
+      margin: 0;
+    }
+
+    #bdc-cdk-dynamics-ui .screen-note {
+      margin-top: 4px;
+    }
+
+    #bdc-cdk-dynamics-ui .panel {
+      border: 1px solid var(--bdc-line);
+      border-radius: 8px;
+      background: var(--bdc-surface);
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    #bdc-cdk-dynamics-ui .panel-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--bdc-line);
+      flex-wrap: wrap;
+    }
+
+    #bdc-cdk-dynamics-ui .panel-body {
+      padding: 14px;
+    }
+
+    #bdc-cdk-dynamics-ui .priority-explain {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 14px;
+    }
+
+    #bdc-cdk-dynamics-ui .priority-number {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      background: #ffaaaa;
+      color: light-dark(#451313, #1a0808);
+      font-size: 1.15em;
+      font-weight: 500;
+    }
+
+    #bdc-cdk-dynamics-ui .search-row {
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) auto auto;
+      gap: 10px;
+      align-items: end;
+    }
+
+    #bdc-cdk-dynamics-ui .field-label {
+      display: grid;
+      gap: 5px;
+      font-size: .84em;
+      text-transform: uppercase;
+      letter-spacing: .02em;
+    }
+
+    #bdc-cdk-dynamics-ui .field {
+      width: 100%;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    #bdc-cdk-dynamics-ui .btn {
+      min-height: 36px;
+      border: 1px solid var(--bdc-line);
+      border-radius: 8px;
+      background: var(--bdc-surface);
+      color: var(--bdc-text);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 8px 11px;
+      text-decoration: none;
+    }
+
+    #bdc-cdk-dynamics-ui .btn-primary {
+      border-color: var(--bdc-red);
+      background: var(--bdc-red);
+      color: light-dark(#ffffff, #1a0808);
+      font-weight: 500;
+    }
+
+    #bdc-cdk-dynamics-ui .btn-green {
+      border-color: var(--bdc-green);
+      background: var(--bdc-green);
+      color: light-dark(#ffffff, #052011);
+      font-weight: 500;
+    }
+
+    #bdc-cdk-dynamics-ui .btn-soft {
+      background: var(--bdc-soft);
+    }
+
+    #bdc-cdk-dynamics-ui .pill {
+      border-radius: 999px;
+      min-height: 26px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 9px;
+      border: 1px solid var(--bdc-line);
+      background: var(--bdc-soft);
+      color: var(--bdc-text);
+      white-space: nowrap;
+    }
+
+    #bdc-cdk-dynamics-ui .pill.red {
+      background: var(--bdc-red-soft);
+      color: var(--bdc-red);
+      border-color: light-dark(#ffc6c6, #713636);
+    }
+
+    #bdc-cdk-dynamics-ui .pill.blue {
+      background: var(--bdc-blue-soft);
+      color: var(--bdc-blue);
+      border-color: light-dark(#c7dbff, #304c7a);
+    }
+
+    #bdc-cdk-dynamics-ui .pill.green {
+      background: var(--bdc-green-soft);
+      color: var(--bdc-green);
+      border-color: light-dark(#b9efca, #25573c);
+    }
+
+    #bdc-cdk-dynamics-ui .pill.amber {
+      background: var(--bdc-amber-soft);
+      color: var(--bdc-amber);
+      border-color: light-dark(#ffdca3, #745021);
+    }
+
+    #bdc-cdk-dynamics-ui .pill.purple {
+      background: var(--bdc-purple-soft);
+      color: var(--bdc-purple);
+      border-color: light-dark(#d8c6ff, #56407d);
+    }
+
+    #bdc-cdk-dynamics-ui .stats {
+      display: grid;
+      grid-template-columns: repeat(9, minmax(122px, 1fr));
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+
+    #bdc-cdk-dynamics-ui .stat {
+      border: 1px solid var(--bdc-line);
+      border-left: 4px solid var(--bdc-line);
+      border-radius: 8px;
+      background: var(--bdc-surface);
+      padding: 10px 11px;
+      min-width: 122px;
+    }
+
+    #bdc-cdk-dynamics-ui .stat.is-active {
+      border-color: var(--bdc-red);
+      border-left-color: var(--bdc-red);
+    }
+
+    #bdc-cdk-dynamics-ui .stat.blue {
+      border-left-color: var(--bdc-blue);
+    }
+
+    #bdc-cdk-dynamics-ui .stat.green {
+      border-left-color: var(--bdc-green);
+    }
+
+    #bdc-cdk-dynamics-ui .stat.amber {
+      border-left-color: var(--bdc-amber);
+    }
+
+    #bdc-cdk-dynamics-ui .stat.purple {
+      border-left-color: var(--bdc-purple);
+    }
+
+    #bdc-cdk-dynamics-ui .stat-label {
+      color: var(--bdc-muted);
+      font-size: .78em;
+      text-transform: uppercase;
+      letter-spacing: .02em;
+    }
+
+    #bdc-cdk-dynamics-ui .stat-value {
+      margin-top: 5px;
+      font-size: 1.55em;
+      font-weight: 500;
+    }
+
+    #bdc-cdk-dynamics-ui .table-wrap {
+      overflow-x: auto;
+    }
+
+    #bdc-cdk-dynamics-ui table {
+      width: 100%;
+      min-width: 1050px;
+      border-collapse: collapse;
+    }
+
+    #bdc-cdk-dynamics-ui th,
+    #bdc-cdk-dynamics-ui td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--bdc-line);
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    #bdc-cdk-dynamics-ui th {
+      background: var(--bdc-soft);
+      color: var(--bdc-muted);
+      font-size: .78em;
+      text-transform: uppercase;
+      letter-spacing: .02em;
+      font-weight: 500;
+    }
+
+    #bdc-cdk-dynamics-ui tr.is-selected td {
+      background: var(--bdc-red-soft);
+    }
+
+    #bdc-cdk-dynamics-ui .main-text {
+      font-weight: 500;
+    }
+
+    #bdc-cdk-dynamics-ui .sub-text {
+      color: var(--bdc-muted);
+      margin-top: 3px;
+    }
+
+    #bdc-cdk-dynamics-ui .campaign-table {
+      min-width: 860px;
+    }
+
+    #bdc-cdk-dynamics-ui .detail-layout {
+      display: grid;
+      grid-template-columns: minmax(360px, 1fr) minmax(320px, .75fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    #bdc-cdk-dynamics-ui .customer-head {
+      background: var(--bdc-red);
+      color: light-dark(#ffffff, #1a0808);
+      padding: 17px 18px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    #bdc-cdk-dynamics-ui .customer-head h2 {
+      font-size: 1.35em;
+    }
+
+    #bdc-cdk-dynamics-ui .close-button {
+      border: 0;
+      background: transparent;
+      color: currentColor;
+      display: grid;
+      place-items: center;
+      min-width: 32px;
+      min-height: 32px;
+      border-radius: 8px;
+    }
+
+    #bdc-cdk-dynamics-ui .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    #bdc-cdk-dynamics-ui .form-grid .wide {
+      grid-column: 1 / -1;
+    }
+
+    #bdc-cdk-dynamics-ui textarea {
+      min-height: 82px;
+      resize: vertical;
+    }
+
+    #bdc-cdk-dynamics-ui .insight-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    #bdc-cdk-dynamics-ui .insight {
+      border: 1px solid var(--bdc-line);
+      border-radius: 8px;
+      background: var(--bdc-soft);
+      padding: 12px;
+      min-height: 64px;
+    }
+
+    #bdc-cdk-dynamics-ui .insight .label {
+      color: var(--bdc-muted);
+      font-size: .78em;
+      text-transform: uppercase;
+      letter-spacing: .02em;
+      margin-bottom: 5px;
+    }
+
+    #bdc-cdk-dynamics-ui .why-box {
+      margin-top: 12px;
+      border-left: 4px solid #ffaaaa;
+      border-radius: 7px;
+      background: var(--bdc-soft);
+      padding: 12px 14px;
+    }
+
+    #bdc-cdk-dynamics-ui .appointment-improvement {
+      border: 1px solid light-dark(#bad6ff, #314f7a);
+      background: var(--bdc-blue-soft);
+      border-radius: 8px;
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    #bdc-cdk-dynamics-ui .appointment-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    #bdc-cdk-dynamics-ui .slot-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    #bdc-cdk-dynamics-ui .slot {
+      border: 1px solid var(--bdc-line);
+      border-radius: 8px;
+      background: var(--bdc-surface);
+      color: var(--bdc-text);
+      min-height: 52px;
+      display: grid;
+      gap: 2px;
+      padding: 8px;
+      text-align: left;
+    }
+
+    #bdc-cdk-dynamics-ui .slot.is-selected {
+      border-color: var(--bdc-green);
+      background: var(--bdc-green-soft);
+      color: var(--bdc-green);
+    }
+
+    #bdc-cdk-dynamics-ui .bitacora {
+      display: grid;
+      gap: 9px;
+    }
+
+    #bdc-cdk-dynamics-ui .bitacora-item {
+      border: 1px solid var(--bdc-line);
+      border-radius: 8px;
+      background: var(--bdc-soft);
+      padding: 10px;
+      display: grid;
+      gap: 4px;
+    }
+
+    #bdc-cdk-dynamics-ui .basic-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    #bdc-cdk-dynamics-ui .flow {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(128px, 1fr));
+      gap: 10px;
+      overflow-x: auto;
+    }
+
+    #bdc-cdk-dynamics-ui .flow-step {
+      border: 1px solid var(--bdc-line);
+      border-radius: 8px;
+      background: var(--bdc-surface);
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+      min-width: 128px;
+    }
+
+    #bdc-cdk-dynamics-ui .flow-number {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      background: var(--bdc-red-soft);
+      color: var(--bdc-red);
+      font-weight: 500;
+    }
+
+    #bdc-cdk-dynamics-ui .gap-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    #bdc-cdk-dynamics-ui .gap-item {
+      border: 1px solid var(--bdc-line);
+      border-radius: 8px;
+      background: var(--bdc-soft);
+      padding: 10px 12px;
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+    }
+
+    #bdc-cdk-dynamics-ui .gap-item .marker {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: var(--bdc-blue-soft);
+      color: var(--bdc-blue);
+      font-weight: 500;
+    }
+
+    #bdc-cdk-dynamics-ui [data-lucide] {
+      width: 16px;
+      height: 16px;
+      flex: 0 0 auto;
+    }
+
+    @media (max-width: 980px) {
+      #bdc-cdk-dynamics-ui .shell,
+      #bdc-cdk-dynamics-ui .detail-layout {
+        grid-template-columns: 1fr;
+      }
+
+      #bdc-cdk-dynamics-ui .sidebar {
+        border-right: 0;
+        border-bottom: 1px solid var(--bdc-line);
+      }
+
+      #bdc-cdk-dynamics-ui .nav-scroll {
+        display: flex;
+        overflow-x: auto;
+        gap: 6px;
+        padding: 10px;
+      }
+
+      #bdc-cdk-dynamics-ui .nav-section {
+        display: none;
+      }
+
+      #bdc-cdk-dynamics-ui .nav-item {
+        width: auto;
+        white-space: nowrap;
+        grid-template-columns: 20px auto auto;
+      }
+
+      #bdc-cdk-dynamics-ui .brand {
+        display: none;
+      }
+
+      #bdc-cdk-dynamics-ui .search-row,
+      #bdc-cdk-dynamics-ui .form-grid,
+      #bdc-cdk-dynamics-ui .insight-grid,
+      #bdc-cdk-dynamics-ui .basic-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      #bdc-cdk-dynamics-ui .topbar,
+      #bdc-cdk-dynamics-ui .screen-head,
+      #bdc-cdk-dynamics-ui .priority-explain,
+      #bdc-cdk-dynamics-ui .customer-head {
+        flex-direction: column;
+        align-items: stretch;
+        display: flex;
+      }
+
+      #bdc-cdk-dynamics-ui .agency-select {
+        min-width: 0;
+        width: 100%;
+      }
+
+      #bdc-cdk-dynamics-ui .appointment-grid,
+      #bdc-cdk-dynamics-ui .slot-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+
+  <div class="app">
+    <div class="topline"></div>
+    <div class="shell">
+      <aside class="sidebar" aria-label="Navegación BDC">
+        <div class="brand">
+          <strong>Sistema de BDC</strong>
+          <span>Postventa · Kia</span>
+        </div>
+        <div class="nav-scroll">
+          <div class="nav-section">Mi día</div>
+          <button class="nav-item" type="button" data-go-screen="screen-queue"><i data-lucide="phone-forwarded" aria-hidden="true"></i><span>Seguimientos de hoy</span><span class="count">6</span></button>
+          <button class="nav-item" type="button" data-go-screen="screen-flow"><i data-lucide="gauge" aria-hidden="true"></i><span>Mi desempeño</span><span class="count">18%</span></button>
+
+          <div class="nav-section">Llamadas</div>
+          <button class="nav-item is-active" type="button" data-go-screen="screen-queue"><span class="priority-dot">1</span><span>Prioridad 1</span><span class="count">24</span></button>
+          <button class="nav-item" type="button" data-go-screen="screen-queue"><span class="priority-dot p2">2</span><span>Prioridad 2</span><span class="count">38</span></button>
+          <button class="nav-item" type="button" data-go-screen="screen-queue"><span class="priority-dot p3">3</span><span>Prioridad 3</span><span class="count">51</span></button>
+          <button class="nav-item" type="button" data-go-screen="screen-queue"><span class="priority-dot p4">4</span><span>Prioridad 4</span><span class="count">72</span></button>
+          <button class="nav-item" type="button" data-go-screen="screen-queue"><span class="priority-dot p5">5</span><span>Prioridad 5</span><span class="count">96</span></button>
+          <button class="nav-item" type="button" data-go-screen="screen-queue"><i data-lucide="clock-3" aria-hidden="true"></i><span>Meses sin venir</span><span class="count">312</span></button>
+          <button class="nav-item" type="button" data-go-screen="screen-queue"><i data-lucide="sparkles" aria-hidden="true"></i><span>Primer servicio</span><span class="count">418</span></button>
+
+          <div class="nav-section">Agenda</div>
+          <button class="nav-item" type="button" data-go-screen="screen-detail"><i data-lucide="calendar-days" aria-hidden="true"></i><span>Citas</span><span class="count">10</span></button>
+
+          <div class="nav-section">Gestión</div>
+          <button class="nav-item" type="button" data-go-screen="screen-campaigns"><i data-lucide="megaphone" aria-hidden="true"></i><span>Campañas</span><span class="count">3</span></button>
+          <button class="nav-item" type="button" data-go-screen="screen-flow"><i data-lucide="workflow" aria-hidden="true"></i><span>Flujo Dynamics</span><span class="count">+</span></button>
+        </div>
+      </aside>
+
+      <main class="content">
+        <header class="topbar">
+          <div>
+            <div class="page-title" data-page-title>Llamadas Prioridad 1</div>
+            <div class="muted" data-page-subtitle>Garantía en riesgo · padrón interno</div>
+          </div>
+          <div class="top-actions">
+            <span class="field-label">Agencia</span>
+            <select class="agency-select" aria-label="Agencia">
+              <option>Kia Bajío Autocom</option>
+              <option>Kia Universidad</option>
+              <option>Kia Satélite</option>
+            </select>
+            <select class="status-select" aria-label="Disponibilidad del asesor">
+              <option>● Disponible</option>
+              <option>● En llamada</option>
+              <option>● Ausente</option>
+            </select>
+            <span class="main-text">Juliana Zamudio</span>
+            <span class="agent-badge">JZ</span>
+          </div>
+        </header>
+
+        <nav class="tabs" role="tablist" aria-label="Pantallas de propuesta">
+          <button class="tab" id="tab-queue" type="button" role="tab" aria-selected="true" aria-controls="screen-queue" data-tab-target="screen-queue">Cola por segmento</button>
+          <button class="tab" id="tab-campaigns" type="button" role="tab" aria-selected="false" aria-controls="screen-campaigns" data-tab-target="screen-campaigns">Campañas</button>
+          <button class="tab" id="tab-detail" type="button" role="tab" aria-selected="false" aria-controls="screen-detail" data-tab-target="screen-detail">Detalle + cita</button>
+          <button class="tab" id="tab-flow" type="button" role="tab" aria-selected="false" aria-controls="screen-flow" data-tab-target="screen-flow">Flujo BDC</button>
+        </nav>
+
+        <section class="screen" id="screen-queue" role="tabpanel" aria-labelledby="tab-queue">
+          <div class="screen-head">
+            <div>
+              <h2>Llamadas Prioridad 1</h2>
+              <p class="screen-note">Clientes activos ordenados por valor esperado. La lista nace del padrón interno, no de leads digitales.</p>
+            </div>
+            <div class="screen-actions">
+              <label class="field-label">Buscar
+                <input class="field" type="search" value="Elisa Lugo" aria-label="Buscar cliente VIN placa teléfono">
+              </label>
+              <button class="btn btn-primary" type="button"><i data-lucide="plus" aria-hidden="true"></i>Agregar registro</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="priority-explain">
+              <div class="priority-number">1</div>
+              <div>
+                <div class="main-text">Prioridad 1 · Garantía en riesgo</div>
+                <div class="sub-text">Su garantía está por vencer y el auto no ha entrado a servicio. Es la cola más urgente: se agota P1 antes de bajar a P2.</div>
+              </div>
+              <span class="pill red">SLA: contactar hoy</span>
+            </div>
+          </div>
+
+          <div class="stats" aria-label="Estados de cola">
+            <div class="stat is-active"><div class="stat-label">Todos</div><div class="stat-value">24</div></div>
+            <div class="stat"><div class="stat-label">Pendiente</div><div class="stat-value">9</div></div>
+            <div class="stat blue"><div class="stat-label">Asignado</div><div class="stat-value">7</div></div>
+            <div class="stat amber"><div class="stat-label">En gestión</div><div class="stat-value">4</div></div>
+            <div class="stat purple"><div class="stat-label">Contactado</div><div class="stat-value">2</div></div>
+            <div class="stat blue"><div class="stat-label">Cita agendada</div><div class="stat-value">1</div></div>
+            <div class="stat"><div class="stat-label">Ilocalizable</div><div class="stat-value">1</div></div>
+            <div class="stat"><div class="stat-label">Descartado</div><div class="stat-value">0</div></div>
+            <div class="stat green"><div class="stat-label">Recuperado</div><div class="stat-value">0</div></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h3>Clientes a contactar</h3>
+              <div class="chips">
+                <span class="pill red">P1</span>
+                <span class="pill blue">Canal visible</span>
+                <span class="pill green">Agendar desde detalle</span>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table aria-label="Listado de clientes a contactar">
+                <thead>
+                  <tr>
+                    <th>Cliente</th>
+                    <th>Teléfono</th>
+                    <th>Canal sugerido</th>
+                    <th>Vehículo</th>
+                    <th>Última visita</th>
+                    <th>KM desde</th>
+                    <th>Valor esp.</th>
+                    <th>Intentos</th>
+                    <th>Estatus</th>
+                    <th>Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="is-selected">
+                    <td><div class="main-text">Elisa Lugo Ipiña</div><div class="sub-text">Primer servicio · P1</div></td>
+                    <td>(55) 6915-2924</td>
+                    <td><span class="pill green">Llamada</span></td>
+                    <td><div class="main-text">BR-V Touring 2025</div><div class="sub-text">Placa nueva · VIN ...7294</div></td>
+                    <td>13.1 meses</td>
+                    <td>10,099 km</td>
+                    <td>53.40%</td>
+                    <td>0</td>
+                    <td><span class="pill amber">Pendiente</span></td>
+                    <td><button class="btn btn-primary" type="button" data-go-screen="screen-detail"><i data-lucide="panel-right-open" aria-hidden="true"></i>Trabajar</button></td>
+                  </tr>
+                  <tr>
+                    <td><div class="main-text">Mario Rivas</div><div class="sub-text">Garantía por vencer · P1</div></td>
+                    <td>(477) 514-8820</td>
+                    <td><span class="pill green">WhatsApp</span></td>
+                    <td><div class="main-text">K3 EX 2024</div><div class="sub-text">GYR-219-D</div></td>
+                    <td>11.8 meses</td>
+                    <td>8,420 km</td>
+                    <td>49.10%</td>
+                    <td>1</td>
+                    <td><span class="pill purple">Contactado</span></td>
+                    <td><button class="btn" type="button" data-go-screen="screen-detail">Ver</button></td>
+                  </tr>
+                  <tr>
+                    <td><div class="main-text">Sofía Martínez</div><div class="sub-text">Meses sin venir · P2</div></td>
+                    <td>(55) 4180-0021</td>
+                    <td><span class="pill">Correo</span></td>
+                    <td><div class="main-text">Sportage 2022</div><div class="sub-text">NMA-774-B</div></td>
+                    <td>16.4 meses</td>
+                    <td>18,740 km</td>
+                    <td>41.80%</td>
+                    <td>2</td>
+                    <td><span class="pill amber">Seguimiento</span></td>
+                    <td><button class="btn" type="button" data-go-screen="screen-detail">Ver</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen" id="screen-campaigns" role="tabpanel" aria-labelledby="tab-campaigns" hidden>
+          <div class="screen-head">
+            <div>
+              <h2>Campañas</h2>
+              <p class="screen-note">Cada recálculo mensual del padrón genera campañas y colas de contacto medibles por separado.</p>
+            </div>
+            <button class="btn btn-primary" type="button"><i data-lucide="refresh-cw" aria-hidden="true"></i>Recalcular padrón</button>
+          </div>
+
+          <div class="panel">
+            <div class="table-wrap">
+              <table class="campaign-table" aria-label="Campañas activas">
+                <thead>
+                  <tr>
+                    <th>Campaña</th>
+                    <th>Corte</th>
+                    <th>Estado</th>
+                    <th>Leads</th>
+                    <th>Trabajados</th>
+                    <th>Citas</th>
+                    <th>Recuperados</th>
+                    <th>Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><div class="main-text">Primer servicio</div><div class="sub-text">Clientes con primer mantenimiento pendiente</div></td>
+                    <td>17/09/2026</td>
+                    <td><span class="pill">Cerrada</span></td>
+                    <td>418</td>
+                    <td>9</td>
+                    <td>0</td>
+                    <td>0</td>
+                    <td><button class="btn" type="button" data-go-screen="screen-queue">Ver cola</button></td>
+                  </tr>
+                  <tr>
+                    <td><div class="main-text">Ciclo 2026-09</div><div class="sub-text">Padrón mensual completo</div></td>
+                    <td>09/09/2026</td>
+                    <td><span class="pill green">Activa</span></td>
+                    <td>889</td>
+                    <td>0</td>
+                    <td>0</td>
+                    <td>0</td>
+                    <td><button class="btn" type="button" data-go-screen="screen-queue">Ver cola</button></td>
+                  </tr>
+                  <tr>
+                    <td><div class="main-text">Retención Postventa 2026-08</div><div class="sub-text">Clientes en riesgo de fuga</div></td>
+                    <td>01/08/2026</td>
+                    <td><span class="pill">Cerrada</span></td>
+                    <td>8,379</td>
+                    <td>311</td>
+                    <td>10</td>
+                    <td>3</td>
+                    <td><button class="btn" type="button" data-go-screen="screen-queue">Ver cola</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen" id="screen-detail" role="tabpanel" aria-labelledby="tab-detail" hidden>
+          <div class="panel">
+            <div class="customer-head">
+              <div>
+                <h2>Elisa Lugo Ipiña</h2>
+                <div>(55) 6915-2924 · BR-V Touring 2025</div>
+              </div>
+              <button class="close-button" type="button" data-go-screen="screen-queue" aria-label="Cerrar detalle"><i data-lucide="x" aria-hidden="true"></i></button>
+            </div>
+          </div>
+
+          <div class="detail-layout">
+            <div class="left-detail">
+              <div class="panel">
+                <div class="panel-head">
+                  <h3>Registrar contacto</h3>
+                  <span class="pill blue">Canal requerido</span>
+                </div>
+                <div class="panel-body">
+                  <div class="form-grid">
+                    <label class="field-label">Canal de contacto
+                      <select aria-label="Canal de contacto">
+                        <option>Llamada</option>
+                        <option>WhatsApp</option>
+                        <option>Correo</option>
+                        <option>Inbound</option>
+                      </select>
+                    </label>
+                    <label class="field-label">Resultado Honda
+                      <select aria-label="Resultado Honda">
+                        <option>Elige...</option>
+                        <option>Confirmó su cita</option>
+                        <option>Pidió mover la cita</option>
+                        <option>Canceló la cita</option>
+                        <option>No llegó a su cita</option>
+                        <option>Cita agendada</option>
+                        <option>Cliente frecuente</option>
+                        <option>Cliente interesado actual</option>
+                        <option>Cliente interesado futuro</option>
+                        <option>Cliente perdido</option>
+                        <option>Activo en otra agencia Autocom</option>
+                        <option>Erróneo (dato incorrecto)</option>
+                        <option>Intento de contacto</option>
+                        <option>No aplica llamada</option>
+                        <option>Ya tiene cita</option>
+                        <option>Duplicado</option>
+                      </select>
+                    </label>
+                    <label class="field-label wide">Comentario
+                      <textarea aria-label="Comentario del contacto">Cliente pide opciones por la mañana y quiere confirmar disponibilidad antes de aceptar.</textarea>
+                    </label>
+                  </div>
+                  <div class="row-actions" style="justify-content: flex-end; margin-top: 12px;">
+                    <button class="btn btn-green" type="button"><i data-lucide="save" aria-hidden="true"></i>Guardar contacto</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-head">
+                  <h3>Por qué está en la lista</h3>
+                  <span class="pill red">P1 · Primer servicio</span>
+                </div>
+                <div class="panel-body">
+                  <div class="insight-grid">
+                    <div class="insight"><div class="label">Prioridad</div><div class="main-text"><span class="pill red">P1</span> Primer servicio</div></div>
+                    <div class="insight"><div class="label">Motivo</div><div class="main-text">Primer servicio</div></div>
+                    <div class="insight"><div class="label">Meses sin venir</div><div class="main-text">13.1</div></div>
+                    <div class="insight"><div class="label">KM desde su servicio</div><div class="main-text">10,099 km</div></div>
+                    <div class="insight"><div class="label">Odómetro proyectado</div><div class="main-text">10,099 km</div></div>
+                    <div class="insight"><div class="label">Última visita</div><div class="main-text">16/08/2025</div></div>
+                    <div class="insight"><div class="label">En garantía</div><div class="main-text">Sí</div></div>
+                    <div class="insight"><div class="label">Prob. de retorno</div><div class="main-text">53.40%</div></div>
+                  </div>
+                  <div class="why-box">
+                    <div class="field-label">Qué significa P1</div>
+                    <div class="main-text">Garantía en riesgo</div>
+                    <p class="sub-text">Su garantía está por vencer y el auto no ha entrado a servicio. Si no vuelve antes del corte, pierde cobertura y la agencia pierde el trabajo de garantía.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-head">
+                  <h3>Cliente y vehículo</h3>
+                  <div class="row-actions">
+                    <button class="btn" type="button"><i data-lucide="edit-3" aria-hidden="true"></i>Editar datos</button>
+                    <button class="btn" type="button"><i data-lucide="star" aria-hidden="true"></i>Marcar destacado</button>
+                  </div>
+                </div>
+                <div class="panel-body basic-grid">
+                  <div class="insight"><div class="label">Nombre</div><div class="main-text">Elisa Lugo Ipiña</div></div>
+                  <div class="insight"><div class="label">Teléfono</div><div class="main-text">(55) 6915-2924</div></div>
+                  <div class="insight"><div class="label">Vehículo</div><div class="main-text">BR-V Touring 2025</div></div>
+                  <div class="insight"><div class="label">Agencia sugerida</div><div class="main-text">Kia Bajío Autocom</div></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="right-detail">
+              <div class="appointment-improvement">
+                <div>
+                  <h3>Área de mejora Dynamics: agendar desde la misma gestión</h3>
+                  <p class="sub-text">En CDK el detalle permite registrar resultado, pero no queda claro cómo convertir la llamada en cita. Aquí la cita vive junto al contacto.</p>
+                </div>
+                <div class="appointment-grid">
+                  <label class="field-label">Agencia
+                    <select aria-label="Agencia cita">
+                      <option>Kia Bajío Autocom</option>
+                      <option>Kia Universidad</option>
+                    </select>
+                  </label>
+                  <label class="field-label">Tipo de servicio
+                    <select aria-label="Tipo de servicio">
+                      <option>Primer servicio</option>
+                      <option>Garantía</option>
+                      <option>Mantenimiento preventivo</option>
+                    </select>
+                  </label>
+                  <label class="field-label">Fecha
+                    <input class="field" type="date" value="2026-09-21" aria-label="Fecha cita">
+                  </label>
+                  <label class="field-label">Asesor / capacidad
+                    <select aria-label="Asesor o capacidad">
+                      <option>Cualquier asesor disponible</option>
+                      <option>Asesor de garantía</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="slot-grid" aria-label="Horarios disponibles">
+                  <button class="slot is-selected" type="button" data-slot="08:30"><strong>08:30</strong><span class="muted">3 espacios</span></button>
+                  <button class="slot" type="button" data-slot="10:00"><strong>10:00</strong><span class="muted">2 espacios</span></button>
+                  <button class="slot" type="button" data-slot="12:30"><strong>12:30</strong><span class="muted">1 espacio</span></button>
+                </div>
+                <div class="panel" style="box-shadow: none;">
+                  <div class="panel-body">
+                    <div class="main-text" data-selected-slot>Reserva propuesta: lunes 21/09/2026 · 08:30</div>
+                    <div class="sub-text">Genera folio, actualiza estatus a cita agendada y deja bitácora del contacto.</div>
+                    <div class="row-actions" style="margin-top: 10px;">
+                      <button class="btn btn-primary" type="button"><i data-lucide="calendar-check" aria-hidden="true"></i>Crear cita</button>
+                      <button class="btn btn-soft" type="button"><i data-lucide="send" aria-hidden="true"></i>Enviar opciones</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="panel" style="margin-top: 14px;">
+                <div class="panel-head">
+                  <h3>Bitácora</h3>
+                  <span class="small-pill">2</span>
+                </div>
+                <div class="panel-body bitacora">
+                  <div class="bitacora-item">
+                    <div class="main-text">Intento de contacto</div>
+                    <div class="sub-text">18/09/2026 · Llamada · sin respuesta</div>
+                  </div>
+                  <div class="bitacora-item">
+                    <div class="main-text">WhatsApp enviado</div>
+                    <div class="sub-text">18/09/2026 · Se enviaron horarios sugeridos</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="screen" id="screen-flow" role="tabpanel" aria-labelledby="tab-flow" hidden>
+          <div class="screen-head">
+            <div>
+              <h2>Flujo BDC Postventa en Dynamics</h2>
+              <p class="screen-note">Reorientado a clientes activos: segmentar, trabajar cola, contactar, registrar resultado y convertir en cita.</p>
+            </div>
+          </div>
+
+          <div class="flow" aria-label="Flujo operativo">
+            <div class="flow-step"><div class="flow-number">1</div><h3>Padrón interno</h3><p class="sub-text">Clientes, vehículos, visitas, garantía, km y riesgo.</p></div>
+            <div class="flow-step"><div class="flow-number">2</div><h3>Campaña</h3><p class="sub-text">Recálculo mensual y medición por campaña.</p></div>
+            <div class="flow-step"><div class="flow-number">3</div><h3>Segmento</h3><p class="sub-text">Prioridad, meses sin venir, primer servicio, recall.</p></div>
+            <div class="flow-step"><div class="flow-number">4</div><h3>Cola BDC</h3><p class="sub-text">Lista de clientes a contactar por valor esperado.</p></div>
+            <div class="flow-step"><div class="flow-number">5</div><h3>Contacto</h3><p class="sub-text">Canal, resultado Honda, comentario y bitácora.</p></div>
+            <div class="flow-step"><div class="flow-number">6</div><h3>Cita</h3><p class="sub-text">Buscar disponibilidad y crear cita en la misma vista.</p></div>
+            <div class="flow-step"><div class="flow-number">7</div><h3>Handoff</h3><p class="sub-text">Agencia recibe folio, motivo, vehículo y notas.</p></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h3>Decisiones de diseño para Dynamics</h3>
+            </div>
+            <div class="panel-body gap-list">
+              <div class="gap-item"><div class="marker">1</div><div><div class="main-text">Mantener el patrón de menú por prioridad</div><div class="sub-text">El equipo ya trabaja así; Dynamics debe respetar esa memoria operativa.</div></div></div>
+              <div class="gap-item"><div class="marker">2</div><div><div class="main-text">Agregar canal de contacto como campo visible</div><div class="sub-text">Debe existir tanto en la lista como en el registro de llamada.</div></div></div>
+              <div class="gap-item"><div class="marker">3</div><div><div class="main-text">Cerrar la brecha de agendamiento</div><div class="sub-text">La mejora principal es no separar registrar contacto de encontrar horario y crear cita.</div></div></div>
+              <div class="gap-item"><div class="marker">4</div><div><div class="main-text">Conservar el detalle de prioridad</div><div class="sub-text">La explicación de P1/P2 ayuda al asesor a entender urgencia y guion de contacto.</div></div></div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const root = document.getElementById("bdc-cdk-dynamics-ui");
+      const tabs = Array.from(root.querySelectorAll("[data-tab-target]"));
+      const screens = Array.from(root.querySelectorAll(".screen"));
+      const navItems = Array.from(root.querySelectorAll(".nav-item"));
+      const title = root.querySelector("[data-page-title]");
+      const subtitle = root.querySelector("[data-page-subtitle]");
+      const titles = {
+        "screen-queue": ["Llamadas Prioridad 1", "Garantía en riesgo · padrón interno"],
+        "screen-campaigns": ["Campañas", "Cada recálculo mensual del padrón"],
+        "screen-detail": ["Detalle de cliente", "Registrar contacto y crear cita"],
+        "screen-flow": ["Flujo Dynamics", "Segmentación BDC para clientes activos"]
+      };
+
+      function activate(screenId) {
+        screens.forEach((screen) => {
+          screen.hidden = screen.id !== screenId;
+        });
+        tabs.forEach((tab) => {
+          const selected = tab.getAttribute("data-tab-target") === screenId;
+          tab.setAttribute("aria-selected", selected ? "true" : "false");
+        });
+        navItems.forEach((item) => {
+          item.classList.toggle("is-active", item.getAttribute("data-go-screen") === screenId && screenId !== "screen-detail");
+        });
+        if (titles[screenId]) {
+          title.textContent = titles[screenId][0];
+          subtitle.textContent = titles[screenId][1];
+        }
+      }
+
+      root.addEventListener("click", (event) => {
+        const tab = event.target.closest("[data-tab-target]");
+        const jump = event.target.closest("[data-go-screen]");
+        if (tab) activate(tab.getAttribute("data-tab-target"));
+        if (jump) activate(jump.getAttribute("data-go-screen"));
+        const slot = event.target.closest("[data-slot]");
+        if (slot) {
+          root.querySelectorAll(".slot").forEach((candidate) => candidate.classList.remove("is-selected"));
+          slot.classList.add("is-selected");
+          const selected = root.querySelector("[data-selected-slot]");
+          if (selected) selected.textContent = "Reserva propuesta: lunes 21/09/2026 · " + slot.getAttribute("data-slot");
+        }
+      });
+
+      if (globalThis.Tweak) {
+        const state = { emphasis: "cita" };
+        function render() {
+          root.dataset.emphasis = state.emphasis;
+        }
+        render();
+        const tweak = new Tweak({ container: root, onChange: render });
+        tweak.addSelect(state, "emphasis", {
+          label: "Énfasis de mejora",
+          reference: "bdc.emphasis",
+          options: [
+            { label: "Cita integrada", value: "cita" },
+            { label: "Segmentación", value: "segmentos" },
+            { label: "Campañas", value: "campanas" }
+          ]
+        });
+      }
+    })();
+  </script>
+</div>
+
+  </main>
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      if (window.lucide) {
+        window.lucide.createIcons({ attrs: { width: 16, height: 16 } });
+      }
+    });
+  </script>
+</body>
+</html>
