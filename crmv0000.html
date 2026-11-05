@@ -1,0 +1,1393 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AT+ CRM Maqueta</title>
+<!--
+  ============================================================================
+  AT+ CRM — Maqueta v1 (prototipo navegable, sin backend)
+  ----------------------------------------------------------------------------
+  Objetivo: mostrar cómo un CRM construido desde cero puede operar el
+  "Journey comercial + campos por objeto" (journey.html) de punta a punta:
+    Nuevo → En Contacto → Cita Programada → En Recepción → Atendido por un
+    asesor → Cotización → Pedido → Facturación → Entrega
+  + transversales (Apartado, Prueba de manejo, Financiamiento, Auto a cuenta,
+    Expediente digital, Logística).
+
+  Fuentes de verdad usadas:
+    1. journey.html  → 199 campos (F001–F199) con etapa y rol, 74 toques de
+                        contacto (Contact Plan CDK, Touch Points Piso, Creatio).
+                        Se incrustan tal cual en <script id="journey-data">.
+    2. leads-api.md  → contratos del lead-capture-middleware (creación de
+                        leads, crm_dispatches, citas, mensajes Vambe, cotización
+                        de toma). Aquí se SIMULAN; no se hace ninguna llamada real.
+    3. Figma "handoff-multimarcas" (frame handOff AUTOCOM) → tokens de color,
+                        tipografía (Inter), botones, sidebar negro con ítem rojo,
+                        tabs con subrayado rojo, alertas y barras de progreso.
+
+  Arquitectura del archivo (vanilla JS, un solo archivo, sin dependencias):
+    - CSS tokens (:root) ............ sistema de diseño AUTOCOM
+    - DATA ........................... journey parseado (campos + toques)
+    - Catálogos ...................... etapas, roles, cadencia 35 días, fuentes
+    - Estado (state) ................. leads simulados en memoria
+    - Simulador middleware (MW) ...... crea lead, despacha a CRMs, Vambe, citas
+    - Vistas (render*) ............... Mi día, Leads, Pipeline, Ficha 360,
+                                       Recepción, Agenda, Journey, Integraciones,
+                                       Diccionario de campos
+    - Eventos ........................ delegación por atributos data-action
+
+  ⚠️ Todos los datos de clientes son FICTICIOS (política de privacidad AUTOCOM).
+  ============================================================================
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Inter = fuente de cuerpo del sistema de diseño. Poppins se usa como sustituto
+     visual de "Nissan Brand" (fuente propietaria de títulos en el Figma). -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+<style>
+/* ---------------------------------------------------------------------------
+   1. TOKENS — tomados del Figma (handOff AUTOCOM → 2. Color / 1. Tipografía)
+   --------------------------------------------------------------------------- */
+:root{
+  /* Primario */
+  --ink:#040404;          /* Autocom / negro web */
+  --red:#AF0F2B;          /* Autocom / Rojo web (acento principal) */
+  --red-hover:#D0112F;    /* estado Hover de botón primario */
+  --red-50:#FBEFF1;       /* fondo suave para selección / activo */
+  --gray:#6A7282;         /* gris primario */
+  /* Neutrales */
+  --n-900:#040404; --n-700:#333333; --n-600:#555555; --n-500:#696969;
+  --line:#D1D5DC; --bg:#F9FAFB; --bg-warm:#FBF9F9; --white:#FFFFFF;
+  /* Estados (alertas del sistema) */
+  --success:#16A34A; --success-50:#ECFDF3;
+  --warning:#F59E0B; --warning-50:#FFFBEB;
+  --error:#DC2626;   --error-50:#FEF2F2;
+  --info:#2563EB;    --info-50:#EFF6FF;
+  /* Colores por rol (heredados de journey.html para mantener la misma lectura) */
+  --r-bdc:#2F80ED; --r-host:#169C89; --r-apv:#E5902A; --r-fi:#B45309;
+  --r-sys:#697386; --r-ger:#7C3AED; --transversal:#7C3AED;
+  /* Espaciado 8pt + radios */
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+  --radius:4px; --radius-lg:8px;
+  --shadow:0 1px 2px rgba(4,4,4,.06),0 4px 16px rgba(4,4,4,.06);
+  --font:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+  --font-title:'Poppins','Inter',system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:var(--font);font-size:14px;line-height:20px;color:var(--ink);background:var(--bg)}
+button,input,select,textarea{font:inherit;color:inherit}
+h1,h2,h3{font-family:var(--font-title);margin:0;letter-spacing:0}
+h1{font-size:24px;line-height:32px;font-weight:600}
+h2{font-size:18px;line-height:28px;font-weight:600}
+h3{font-size:15px;line-height:22px;font-weight:600}
+.muted{color:var(--gray)} .small{font-size:12px;line-height:16px} .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+svg.i{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+svg.i.sm{width:14px;height:14px}
+
+/* ---------------------------------------------------------------------------
+   2. LAYOUT — sidebar negro (Figma 7.5 Sidebar menu) + contenido
+   --------------------------------------------------------------------------- */
+.app{display:grid;grid-template-columns:232px 1fr;min-height:100vh}
+.sidebar{background:var(--ink);color:#fff;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.brand{display:flex;align-items:center;gap:10px;padding:20px 20px 16px}
+.brand-logo{background:var(--red);color:#fff;font-family:var(--font-title);font-weight:700;font-size:14px;letter-spacing:.5px;padding:4px 8px;border-radius:2px}
+.brand small{color:#9CA3AF;font-size:11px;display:block;line-height:14px}
+.nav{padding:8px 12px;display:flex;flex-direction:column;gap:2px;flex:1;overflow:auto}
+.nav-label{color:#6B7280;font-size:11px;text-transform:uppercase;letter-spacing:.6px;padding:14px 10px 6px}
+.nav button{all:unset;display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:var(--radius);cursor:pointer;color:#E5E7EB;font-size:14px}
+.nav button:hover{background:#1A1A1A}
+.nav button.active{background:var(--red);color:#fff}
+.nav .count{margin-left:auto;background:#262626;color:#fff;border-radius:999px;font-size:11px;padding:0 7px;line-height:18px}
+.nav button.active .count{background:rgba(255,255,255,.22)}
+.side-foot{padding:14px 20px;border-top:1px solid #1F1F1F;font-size:11px;color:#9CA3AF}
+
+.main{min-width:0;display:flex;flex-direction:column}
+.topbar{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:12px 24px}
+.search{flex:1;max-width:520px;display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:var(--radius);padding:0 12px;height:38px;background:var(--bg)}
+.search input{border:0;outline:0;background:transparent;flex:1;height:100%}
+.role-switch{display:flex;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+.role-switch button{all:unset;cursor:pointer;padding:0 12px;height:36px;display:flex;align-items:center;font-size:13px;font-weight:500;border-right:1px solid var(--line)}
+.role-switch button:last-child{border-right:0}
+.role-switch button.active{background:var(--ink);color:#fff}
+.me{display:flex;align-items:center;gap:8px;font-size:13px}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--red-50);color:var(--red);display:grid;place-items:center;font-weight:700;font-size:12px;flex:none}
+.content{padding:24px;display:flex;flex-direction:column;gap:16px}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.page-head p{margin:4px 0 0}
+
+/* ---------------------------------------------------------------------------
+   3. COMPONENTES — botones (Figma 5), inputs (Figma 6), tabs (Figma 7.4),
+      alertas (Figma 7.1), barra de progreso (Figma 7.2), chips
+   --------------------------------------------------------------------------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:var(--radius);border:1px solid var(--red);background:var(--red);color:#fff;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--red-hover);border-color:var(--red-hover)}
+.btn:disabled{background:#E5E7EB;border-color:#E5E7EB;color:#9CA3AF;cursor:not-allowed}
+.btn.secondary{background:#fff;color:var(--red)}
+.btn.secondary:hover{background:var(--red-50)}
+.btn.ghost{background:transparent;border-color:var(--line);color:var(--ink)}
+.btn.ghost:hover{background:var(--bg)}
+.btn.dark{background:var(--ink);border-color:var(--ink)}
+.btn.success{background:var(--success);border-color:var(--success)}
+.btn.sm{height:30px;padding:0 10px;font-size:12px}
+.btn.pill{border-radius:999px}
+.icon-btn{all:unset;cursor:pointer;width:32px;height:32px;display:grid;place-items:center;border-radius:var(--radius);color:var(--gray)}
+.icon-btn:hover{background:var(--bg);color:var(--ink)}
+
+.card{background:#fff;border:1px solid var(--line);border-radius:var(--radius-lg);box-shadow:var(--shadow)}
+.card-h{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px;border-bottom:1px solid #EEF0F3}
+.card-b{padding:16px}
+
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-size:12px;font-weight:600;color:var(--n-700);display:flex;gap:6px;align-items:center}
+.input,select.input,textarea.input{height:38px;border:1px solid var(--line);border-radius:var(--radius);padding:0 12px;background:#fff;outline:0;width:100%}
+textarea.input{height:auto;min-height:72px;padding:10px 12px;resize:vertical}
+.input:hover{border-color:#9CA3AF}
+.input:focus{border-color:var(--ink);box-shadow:0 0 0 3px rgba(4,4,4,.08)}
+.input.error{border-color:var(--error);color:var(--error)}
+.input[readonly],.input:disabled{background:#F3F4F6;color:var(--gray)}
+.hint{font-size:12px;color:var(--gray)} .hint.err{color:var(--error)}
+
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tabs button{all:unset;cursor:pointer;padding:10px 14px;font-size:13px;font-weight:500;color:var(--gray);border-bottom:2px solid transparent;white-space:nowrap;display:flex;gap:6px;align-items:center}
+.tabs button.active{color:var(--red);border-bottom-color:var(--red)}
+.tabs .badge{background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:0 6px;font-size:11px;line-height:16px;color:var(--n-700)}
+
+.alert{display:flex;gap:10px;padding:10px 12px;border-radius:var(--radius);border:1px solid;font-size:13px;align-items:flex-start}
+.alert.info{background:var(--info-50);border-color:#BFDBFE;color:#1E3A8A}
+.alert.warn{background:var(--warning-50);border-color:#FDE68A;color:#78350F}
+.alert.err{background:var(--error-50);border-color:#FECACA;color:#7F1D1D}
+.alert.ok{background:var(--success-50);border-color:#BBF7D0;color:#14532D}
+
+.progress{height:6px;background:#E5E7EB;border-radius:999px;overflow:hidden}
+.progress>span{display:block;height:100%;background:var(--red);border-radius:999px}
+.progress.ok>span{background:var(--success)}
+
+.chip{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:999px;padding:1px 8px;font-size:11px;line-height:18px;font-weight:600;background:#fff;color:var(--n-700);white-space:nowrap}
+.chip.red{background:var(--red-50);border-color:#F3C2CB;color:var(--red)}
+.chip.ok{background:var(--success-50);border-color:#BBF7D0;color:#166534}
+.chip.warn{background:var(--warning-50);border-color:#FDE68A;color:#92400E}
+.chip.err{background:var(--error-50);border-color:#FECACA;color:#991B1B}
+.chip.info{background:var(--info-50);border-color:#BFDBFE;color:#1E40AF}
+.chip.tv{background:#F5F3FF;border-color:#DDD6FE;color:#5B21B6}
+.chip.dark{background:var(--ink);border-color:var(--ink);color:#fff}
+.role{display:inline-flex;font-size:10px;font-weight:700;padding:0 6px;line-height:16px;border-radius:3px;color:#fff}
+.role.BDC{background:var(--r-bdc)} .role.Hostess{background:var(--r-host)} .role.APV{background:var(--r-apv)}
+.role.FI{background:var(--r-fi)} .role.Sistema{background:var(--r-sys)} .role.Gerencia{background:var(--r-ger)}
+.role.ro{opacity:.55}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+.dot.success{background:var(--success)} .dot.pending{background:var(--warning)} .dot.failed{background:var(--error)} .dot.skipped{background:#9CA3AF}
+.temp{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600}
+.temp.Caliente{color:var(--error)} .temp.Tibio{color:#D97706} .temp.Frío{color:var(--info)}
+
+/* ---------------------------------------------------------------------------
+   4. VISTAS
+   --------------------------------------------------------------------------- */
+.kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.kpi{padding:14px 16px}
+.kpi b{display:block;font-family:var(--font-title);font-size:26px;line-height:32px}
+.kpi span{font-size:12px;color:var(--gray);font-weight:500}
+.kpi.alertk b{color:var(--red)}
+.grid-2{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px;align-items:start}
+.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+
+/* Cola de trabajo */
+.task{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 16px;border-bottom:1px solid #EEF0F3;cursor:pointer}
+.task:hover{background:var(--bg-warm)}
+.task:last-child{border-bottom:0}
+.ch-ico{width:36px;height:36px;border-radius:50%;display:grid;place-items:center}
+.ch-ico.call{background:var(--info-50);color:var(--info)}
+.ch-ico.wa{background:var(--success-50);color:var(--success)}
+.ch-ico.mail{background:#F5F3FF;color:var(--r-ger)}
+.ch-ico.person{background:var(--warning-50);color:#B45309}
+.ch-ico.admin{background:#F3F4F6;color:var(--gray)}
+.task-t{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.task-m{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:2px}
+.sla{font-variant-numeric:tabular-nums;font-weight:700}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.filters select.input{width:auto;height:34px;font-size:13px}
+
+/* Tablas */
+.table-wrap{overflow:auto}
+table.t{width:100%;border-collapse:collapse;font-size:13px}
+table.t th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--gray);font-weight:600;padding:10px 12px;border-bottom:1px solid var(--line);background:#FCFCFD;white-space:nowrap;position:sticky;top:0}
+table.t td{padding:10px 12px;border-bottom:1px solid #EEF0F3;vertical-align:middle}
+table.t tr.click{cursor:pointer} table.t tr.click:hover td{background:var(--bg-warm)}
+.who{display:flex;gap:10px;align-items:center}
+.who b{display:block;font-weight:600}
+
+/* Pipeline */
+.board{display:grid;grid-auto-flow:column;grid-auto-columns:250px;gap:12px;overflow-x:auto;padding-bottom:8px}
+.col{background:#F3F4F6;border-radius:var(--radius-lg);display:flex;flex-direction:column;min-height:420px}
+.col-h{padding:10px 12px;display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:13px}
+.col-h .obj{font-size:10px;color:var(--gray);font-weight:500;display:block}
+.col-b{padding:0 8px 8px;display:flex;flex-direction:column;gap:8px;flex:1}
+.col.drop{outline:2px dashed var(--red);outline-offset:-4px}
+.lcard{background:#fff;border:1px solid var(--line);border-radius:var(--radius-lg);padding:10px 12px;cursor:grab;display:flex;flex-direction:column;gap:6px}
+.lcard:hover{border-color:var(--ink)}
+.lcard .row{display:flex;justify-content:space-between;gap:6px;align-items:center}
+
+/* Ficha 360 */
+.lead-head{padding:16px 20px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.lead-head .big{width:52px;height:52px;font-size:18px}
+.lead-head .acts{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.stepper{display:flex;padding:0 20px 16px;gap:0;overflow-x:auto}
+.step{flex:1;min-width:104px;position:relative;text-align:center;font-size:11px;font-weight:600;color:var(--gray);padding-top:26px;cursor:pointer}
+.step::before{content:"";position:absolute;top:9px;left:0;right:0;height:3px;background:#E5E7EB}
+.step:first-child::before{left:50%} .step:last-child::before{right:50%}
+.step i{position:absolute;top:2px;left:50%;transform:translateX(-50%);width:17px;height:17px;border-radius:50%;background:#fff;border:3px solid #D1D5DB;z-index:1}
+.step.done{color:var(--ink)} .step.done::before{background:var(--ink)} .step.done i{background:var(--ink);border-color:var(--ink)}
+.step.cur{color:var(--red)} .step.cur::before{background:linear-gradient(90deg,var(--ink) 50%,#E5E7EB 50%)} .step.cur i{border-color:var(--red);background:#fff;box-shadow:0 0 0 4px var(--red-50)}
+.step small{display:block;font-weight:500;color:#9CA3AF;font-size:10px}
+.tv-row{display:flex;gap:8px;flex-wrap:wrap;padding:0 20px 16px;align-items:center}
+.tv{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;border:1px dashed #C4B5FD;border-radius:999px;padding:3px 10px;font-size:12px;color:#5B21B6;background:#fff}
+.tv.on{border-style:solid;background:#F5F3FF}
+.tv.ok{border-style:solid;border-color:#BBF7D0;background:var(--success-50);color:#166534}
+.lead-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
+.nba{border:1px solid var(--ink);border-radius:var(--radius-lg);overflow:hidden;background:#fff}
+.nba-h{background:var(--ink);color:#fff;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px}
+.nba-b{padding:16px;display:flex;flex-direction:column;gap:12px}
+.script{background:var(--bg-warm);border-left:3px solid var(--red);padding:10px 12px;border-radius:0 var(--radius) var(--radius) 0;font-size:13px;white-space:pre-wrap}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:6px 12px;font-size:13px}
+.kv dt{color:var(--gray)} .kv dd{margin:0;font-weight:500;overflow-wrap:anywhere}
+.mod{border:1px solid var(--line);border-radius:var(--radius-lg);margin-bottom:12px;overflow:hidden}
+.mod-h{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#FCFCFD;border-bottom:1px solid #EEF0F3;cursor:pointer;gap:8px}
+.mod-b{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;padding:14px}
+.mod.closed .mod-b{display:none}
+.toggle{display:flex;gap:0;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;width:max-content}
+.toggle button{all:unset;cursor:pointer;padding:0 14px;height:34px;display:flex;align-items:center;font-size:13px;border-right:1px solid var(--line)}
+.toggle button:last-child{border-right:0}
+.toggle button.on{background:var(--red);color:#fff}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{all:unset;cursor:pointer;border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:12px;font-weight:500;background:#fff}
+.seg button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.seg button.tvb.on{background:var(--transversal);border-color:var(--transversal)}
+.timeline{display:flex;flex-direction:column}
+.tl{display:grid;grid-template-columns:28px 1fr;gap:10px;padding-bottom:14px;position:relative}
+.tl::before{content:"";position:absolute;left:13px;top:26px;bottom:0;width:2px;background:#EEF0F3}
+.tl:last-child::before{display:none}
+.tl .b{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;border:2px solid var(--line);background:#fff;color:var(--gray)}
+.tl.done .b{background:var(--ink);border-color:var(--ink);color:#fff}
+.tl.next .b{border-color:var(--red);color:var(--red);box-shadow:0 0 0 4px var(--red-50)}
+.tl.skip .b{background:#F3F4F6}
+.doc{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #F3F4F6;font-size:13px}
+.doc input{width:16px;height:16px;accent-color:var(--red)}
+.json{background:#0B0B0B;color:#E5E7EB;border-radius:var(--radius);padding:12px;font-size:12px;overflow:auto;max-height:280px;white-space:pre}
+.cad{display:grid;grid-template-columns:repeat(35,minmax(0,1fr));gap:2px}
+.cad div{height:28px;border-radius:2px;background:#F3F4F6;display:grid;place-items:center;font-size:9px;color:#9CA3AF;position:relative}
+.cad div.has{background:#fff;border:1px solid var(--line);color:var(--ink)}
+.cad div.call::after,.cad div.wa::before{content:"";position:absolute;width:6px;height:6px;border-radius:50%;bottom:2px}
+.cad div.call::after{background:var(--info);left:3px}
+.cad div.wa::before{background:var(--success);right:3px}
+.cad div.today{outline:2px solid var(--red)}
+.touch{border:1px solid var(--line);border-radius:var(--radius-lg);background:#fff}
+.touch summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:44px 1fr auto;gap:12px;align-items:center;padding:12px 14px}
+.touch summary::-webkit-details-marker{display:none}
+.touch .tid{font-family:var(--font-title);font-weight:700;color:var(--red)}
+.touch .tb{padding:0 14px 14px 70px;display:grid;gap:10px;font-size:13px}
+.matrix td.c{text-align:center;padding:6px 4px}
+.matrix th.c{text-align:center;writing-mode:vertical-rl;transform:rotate(180deg);height:120px;padding:8px 4px}
+.matrix th.tvh,.matrix td.tvh{background:#FAF8FF}
+
+/* Modal + toasts */
+.modal-bg{position:fixed;inset:0;background:rgba(4,4,4,.45);display:grid;place-items:center;z-index:50;padding:16px}
+.modal{background:#fff;border-radius:var(--radius-lg);width:min(760px,100%);max-height:92vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.25)}
+.modal-h{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line)}
+.modal-b{padding:20px;overflow:auto;display:flex;flex-direction:column;gap:16px}
+.modal-f{padding:14px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;align-items:center}
+.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px}
+.form-grid .full{grid-column:1/-1}
+.section-t{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--gray);font-weight:700;margin-bottom:-4px}
+.toasts{position:fixed;right:20px;bottom:20px;display:flex;flex-direction:column;gap:8px;z-index:60}
+.toast{background:var(--ink);color:#fff;padding:10px 14px;border-radius:var(--radius);font-size:13px;box-shadow:var(--shadow);display:flex;gap:8px;align-items:center;max-width:380px;animation:in .2s ease}
+.toast.ok svg{color:#4ADE80} .toast.err svg{color:#F87171}
+@keyframes in{from{transform:translateY(8px);opacity:0}}
+.empty{padding:32px;text-align:center;color:var(--gray)}
+
+/* Responsivo: el CRM es desktop-first; en pantallas chicas el sidebar se vuelve barra superior */
+@media (max-width:1100px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.grid-2,.lead-grid{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:820px){
+  .app{grid-template-columns:minmax(0,1fr)}.sidebar{position:static;height:auto}.nav{flex-direction:row;overflow-x:auto}.nav button{white-space:nowrap;flex:none}.nav-label,.side-foot{display:none}
+  .role-switch{max-width:100%;overflow-x:auto}.search{max-width:none;flex-basis:100%}.lead-head .acts{margin-left:0}.page-head .filters{width:100%}
+  .topbar{flex-wrap:wrap;padding:12px 16px}.content{padding:16px}.kpis{grid-template-columns:repeat(2,1fr)}
+  .form-grid,.mod-b,.grid-3{grid-template-columns:1fr}.me span{display:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-logo">AUTOCOM</span><div><b style="font-size:14px">AT+ CRM</b><small>Maqueta v1</small></div></div>
+    <nav class="nav" id="nav"></nav>
+    <div class="side-foot">Datos ficticios · sin conexión real al middleware</div>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <label class="search"><svg class="i"><use href="#i-search"/></svg><input id="q" placeholder="Buscar cliente, teléfono, correo o folio de cita…" autocomplete="off"></label>
+      <div class="role-switch" id="roles" title="Cambia la vista según el rol del journey"></div>
+      <button class="btn" data-action="new-lead"><svg class="i"><use href="#i-plus"/></svg>Nuevo lead</button>
+      <div class="me" id="me"></div>
+    </header>
+    <main class="content" id="view"></main>
+  </div>
+</div>
+<div id="modal"></div>
+<div class="toasts" id="toasts"></div>
+
+<!-- Sprite de íconos (trazo 2px, estilo de la sección 3. Icons del Figma) -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+    <symbol id="i-kanban" viewBox="0 0 24 24"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="12" rx="1"/><rect x="17" y="3" width="4" height="8" rx="1"/></symbol>
+    <symbol id="i-door" viewBox="0 0 24 24"><path d="M3 21h18M6 21V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v17M14 12h.01"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></symbol>
+    <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/><path d="M9 19h7.5a3.5 3.5 0 0 0 0-7h-9a3.5 3.5 0 0 1 0-7H15"/></symbol>
+    <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.6 8.6 0 0 1-3.8-.9L3 21l1.9-5.7A8.4 8.4 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5z"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+    <symbol id="i-car" viewBox="0 0 24 24"><path d="M5 17h14M3 13l2-6h14l2 6v5H3zM7 17v2M17 17v2"/><circle cx="7.5" cy="14" r=".5"/><circle cx="16.5" cy="14" r=".5"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h8"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 5l7 7-7 7"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5M11 19l-7-7 7-7"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="m22 2-11 11M22 2l-7 20-4-9-9-4z"/></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24"><path d="M4 22V4M4 4h13l-2 4 2 4H4"/></symbol>
+    <symbol id="i-flame" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1.1-2.1-.2-4 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.2.4-2.3 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+    <symbol id="i-cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  </defs>
+</svg>
+
+<!-- Datos del journey extraídos automáticamente de journey.html:
+     fields  : [{id:"F001", m:"module-0", n:"Nombres del Contacto", s:{"1":["BDC"],"3":["Hostess"]}}]
+               s = columna de etapa → roles que capturan/consultan ese campo
+               columnas: 0 Nuevo, 1 En Contacto, 2 Cita Programada, 3 En Recepción,
+               4 Atendido, 5 Apartado(T), 6 Prueba de manejo(T), 7 Cotización,
+               8 Pedido, 9 Facturación, 10 Entrega
+     mods    : id de módulo → nombre
+     touches : 74 puntos de contacto con etapa, canal, fuente, marca, momento,
+               objetivo, CTA, guion o plantilla -->
+<script type="application/json" id="journey-data">{"fields":[{"id":"F001","m":"module-0","n":"Nombres del Contacto","s":{"1":["BDC"],"3":["Hostess"]}},{"id":"F002","m":"module-0","n":"Apellidos del contacto","s":{"1":["BDC"],"3":["Hostess"]}},{"id":"F003","m":"module-0","n":"Correo Electrónico","s":{"1":["BDC"],"3":["Hostess"]}},{"id":"F004","m":"module-0","n":"Telefono","s":{"1":["BDC"],"3":["Hostess"]}},{"id":"F005","m":"module-0","n":"Mejor Medio de Contacto","s":{"1":["BDC"]}},{"id":"F006","m":"module-0","n":"Segunda mejor forma de contacto","s":{"1":["BDC"]}},{"id":"F007","m":"module-0","n":"Es la primer vez que contacta","s":{"1":["BDC"]}},{"id":"F008","m":"module-0","n":"¿Es primera visita?","s":{"3":["Hostess"]}},{"id":"F009","m":"module-0","n":"Comentarios de Piso","s":{"3":["Hostess"]}},{"id":"F010","m":"module-1","n":"Carroceria","s":{"1":["BDC"],"3":["Hostess"],"4":["APV"]}},{"id":"F011","m":"module-1","n":"Marca","s":{"1":["BDC"],"3":["Hostess"],"4":["APV"]}},{"id":"F012","m":"module-1","n":"Modelo","s":{"1":["BDC"],"3":["Hostess"],"4":["APV"]}},{"id":"F013","m":"module-1","n":"Año","s":{"1":["BDC"],"3":["Hostess"],"4":["APV"]}},{"id":"F014","m":"module-1","n":"Version","s":{"1":["BDC"]}},{"id":"F015","m":"module-1","n":"Transmisión","s":{"1":["BDC"]}},{"id":"F016","m":"module-2","n":"Asesor BDC","s":{"0":["Sistema"]}},{"id":"F017","m":"module-2","n":"Asesor Sucursal","s":{"1":["BDC"],"3":["Hostess"]}},{"id":"F018","m":"module-2","n":"¿Por que medio se entero de nosotros?","s":{"1":["BDC"],"3":["Hostess"]}},{"id":"F019","m":"module-3","n":"Necesidad del Cliente/Grupo de Cliente","s":{"1":["BDC"],"4":["APV"]}},{"id":"F020","m":"module-3","n":"Tipo de Compra","s":{"1":["BDC"],"4":["APV"]}},{"id":"F021","m":"module-3","n":"Temperatura","s":{"4":["APV"]}},{"id":"F022","m":"module-3","n":"Comentarios","s":{"4":["APV"]}},{"id":"F023","m":"module-3","n":"Flotilla","s":{"1":["BDC"],"4":["APV"]}},{"id":"F024","m":"module-3","n":"Rango de Precios","s":{"1":["BDC"],"4":["APV"]}},{"id":"F025","m":"module-3","n":"Fecha Estimada de Cierre","s":{"1":["BDC"],"4":["APV"]}},{"id":"F026","m":"module-3","n":"Presupuesto Estimado","s":{"1":["BDC"],"4":["APV"]}},{"id":"F027","m":"module-4","n":"Estado","s":{"1":["BDC"],"6":["APV"]}},{"id":"F028","m":"module-4","n":"Fecha y hora programada","s":{"1":["BDC"],"6":["APV"]}},{"id":"F029","m":"module-4","n":"Agencia","s":{"1":["BDC"],"6":["APV"]}},{"id":"F030","m":"module-4","n":"Responsable","s":{"6":["APV"]}},{"id":"F031","m":"module-4","n":"Vehiculo a Prueba","s":{"6":["APV"]}},{"id":"F032","m":"module-4","n":"Modalidad","s":{"1":["BDC"],"6":["APV"]}},{"id":"F033","m":"module-4","n":"Cliente","s":{"1":["BDC"],"6":["APV"]}},{"id":"F034","m":"module-4","n":"Fecha hora inicio","s":{"6":["APV"]}},{"id":"F035","m":"module-4","n":"Fecha hora fin","s":{"6":["APV"]}},{"id":"F036","m":"module-4","n":"Encuesta de prueba de manejo","s":{"1":["BDC"],"6":["APV"]}},{"id":"F037","m":"module-4","n":"Licencia de Conductor","s":{"6":["APV"]}},{"id":"F038","m":"module-5","n":"Seleccionar producto","s":{"5":["APV"]}},{"id":"F039","m":"module-5","n":"Producto existente/Fuera de Catalogo","s":{"5":["APV"]}},{"id":"F040","m":"module-5","n":"Sitio de envio","s":{"5":["APV"]}},{"id":"F041","m":"module-5","n":"almacen de envio","s":{"5":["APV"]}},{"id":"F042","m":"module-5","n":"Unidad","s":{"5":["APV"]}},{"id":"F043","m":"module-5","n":"Precios","s":{"5":["APV"]}},{"id":"F044","m":"module-5","n":"Precio por unidad","s":{"5":["APV"]}},{"id":"F045","m":"module-5","n":"Cantidad","s":{"5":["APV"]}},{"id":"F046","m":"module-5","n":"Importe","s":{"5":["APV"]}},{"id":"F047","m":"module-5","n":"Descuento Manual","s":{"5":["APV"]}},{"id":"F048","m":"module-5","n":"Importe Ampliado","s":{"5":["APV"]}},{"id":"F049","m":"module-6","n":"Pago de Anticipo","s":{"8":["APV"]}},{"id":"F050","m":"module-6","n":"Empresa","s":{"8":["APV"]}},{"id":"F051","m":"module-6","n":"Concepto de pago","s":{"8":["APV"]}},{"id":"F052","m":"module-6","n":"Pago general","s":{"8":["APV"]}},{"id":"F053","m":"module-6","n":"Enganche","s":{"8":["APV"]}},{"id":"F054","m":"module-6","n":"Monto","s":{"8":["APV"]}},{"id":"F055","m":"module-6","n":"Divisa","s":{"8":["APV"]}},{"id":"F056","m":"module-6","n":"Cliente","s":{"8":["APV"]}},{"id":"F057","m":"module-7","n":"Empresa","s":{"0":["Sistema"],"5":["APV"]}},{"id":"F058","m":"module-7","n":"Id de Oferta","s":{"5":["APV"]}},{"id":"F059","m":"module-7","n":"Numero de Oferta","s":{"5":["APV"]}},{"id":"F060","m":"module-7","n":"Divisa","s":{"5":["APV"]}},{"id":"F061","m":"module-7","n":"Importe Total","s":{"5":["APV"]}},{"id":"F062","m":"module-7","n":"Efectiva desde","s":{"5":["APV"]}},{"id":"F063","m":"module-7","n":"Efectiva hasta","s":{"5":["APV"]}},{"id":"F064","m":"module-7","n":"Flotilla","s":{"5":["APV"]}},{"id":"F065","m":"module-7","n":"Fuente","s":{"1":["BDC"],"3":["Hostess"],"4":["APV"]}},{"id":"F066","m":"module-8","n":"Categoria (Be Back, Fresh Up, Cita)","s":{"1":["BDC"],"3":["Hostess"],"4":["APV"]}},{"id":"F067","m":"module-8","n":"Fecha de Regreso (Be Back)","s":{"1":["BDC"],"3":["Hostess"]}},{"id":"F068","m":"module-8","n":"Fecha primera visita","s":{"1":["BDC"],"3":["Hostess"],"4":["APV"]}},{"id":"F069","m":"module-8","n":"Se contacto antes de 10 min","s":{"1":["BDC"]}},{"id":"F070","m":"module-8","n":"Al Saludar Mencionar Nombre y Apellido","s":{"1":["BDC"]}},{"id":"F071","m":"module-8","n":"Envía tarjeta digital en formato imágen","s":{"1":["BDC"]}},{"id":"F072","m":"module-8","n":"Al Saludar Mencionar Nombre de la Agencia","s":{"1":["BDC"]}},{"id":"F073","m":"module-9","n":"Ya conoces nuestra marca?","s":{"1":["BDC"]}},{"id":"F074","m":"module-9","n":"Para ti que es mas importante?","s":{"1":["BDC"]}},{"id":"F075","m":"module-9","n":"El vehiculo es para ciudad o viaje?","s":{"1":["BDC"]}},{"id":"F076","m":"module-9","n":"¿Cuántas personas viajan, alguna mascota?","s":{"1":["BDC"]}},{"id":"F077","m":"module-9","n":"Platícame un poco, de tu ruta diaria:","s":{"1":["BDC"]}},{"id":"F078","m":"module-9","n":"Tipo de uso del vehículo","s":{"1":["BDC"]}},{"id":"F079","m":"module-9","n":"¿Que es lo que te gusta del nuevo vehículo?","s":{"1":["BDC"]}},{"id":"F080","m":"module-9","n":"Actualmente que vehiculo tienes?","s":{}},{"id":"F081","m":"module-9","n":"Notas adicionales sobre el estilo de vida:","s":{"1":["BDC"]}},{"id":"F082","m":"module-10","n":"¿Dejarías tu Auto a Cuenta?","s":{"1":["BDC"],"4":["APV"]}},{"id":"F083","m":"module-10","n":"Marca","s":{"1":["BDC"],"4":["APV"]}},{"id":"F084","m":"module-10","n":"Modelo","s":{"1":["BDC"],"4":["APV"]}},{"id":"F085","m":"module-10","n":"Version","s":{"1":["BDC"],"4":["APV"]}},{"id":"F086","m":"module-10","n":"Año","s":{"1":["BDC"],"4":["APV"]}},{"id":"F087","m":"module-10","n":"Kilometraje","s":{"1":["BDC"],"4":["APV"]}},{"id":"F088","m":"module-10","n":"¿Enviar lead a compras?","s":{"1":["BDC"],"4":["APV"]}},{"id":"F089","m":"module-11","n":"Fecha y hora de cita","s":{"2":["BDC"],"3":["Hostess"],"4":["APV"]}},{"id":"F090","m":"module-11","n":"Ofrecer prueba de manejo","s":{"2":["BDC"],"3":["Hostess"],"4":["APV"]}},{"id":"F091","m":"module-11","n":"Se ofrece LSS (KIA)","s":{"2":["BDC"]}},{"id":"F092","m":"module-11","n":"Envío de ubicación de agencia","s":{"2":["BDC"]}},{"id":"F093","m":"module-11","n":"Se agendó LSS (KIA)","s":{"2":["BDC"]}},{"id":"F094","m":"module-11","n":"Se concreta LSS (KIA)","s":{"2":["BDC"]}},{"id":"F095","m":"module-11","n":"Folio Cita","s":{"0":["Sistema"],"2":["BDC (lectura)"],"3":["Hostess (lectura)"],"4":["APV (lectura)"]}},{"id":"F096","m":"module-12","n":"Mención de Garantía de Marca (KIA)*","s":{"1":["BDC"]}},{"id":"F097","m":"module-12","n":"Mención de Piezas Seguras (KIA)*","s":{"1":["BDC"]}},{"id":"F098","m":"module-12","n":"Mención del seguro en el valor de la factura (KIA)*","s":{"1":["BDC"]}},{"id":"F099","m":"module-12","n":"Envío de costos de mantenimiento (KIA)*","s":{"1":["BDC"]}},{"id":"F100","m":"module-12","n":"Mención de asistencia vial (KIA)*","s":{"1":["BDC"]}},{"id":"F101","m":"module-12","n":"Mención de app de marca (KIA)*","s":{"1":["BDC"]}},{"id":"F102","m":"module-12","n":"Mención de Tecnlogía y Conectividad (KIA)*","s":{"1":["BDC"]}},{"id":"F103","m":"module-13","n":"¿Tiene usted algún tipo de pregunta pendiente?","s":{"4":["APV"]}},{"id":"F104","m":"module-13","n":"¿Le gusto el auto?","s":{"4":["APV"]}},{"id":"F105","m":"module-13","n":"¿Comparado con que?","s":{"4":["APV"]}},{"id":"F106","m":"module-13","n":"¿Qué fue lo que más le sorprendió?","s":{"4":["APV"]}},{"id":"F107","m":"module-13","n":"¿Qué fue lo que más le sorprendió?","s":{"4":["APV"]}},{"id":"F108","m":"module-13","n":"Manager Notes","s":{"4":["Gerencia"]}},{"id":"F109","m":"module-13","n":"Notas de Pregunta Pendiente","s":{"4":["APV"]}},{"id":"F110","m":"module-13","n":"Notas del Auto","s":{"4":["APV"]}},{"id":"F111","m":"module-14","n":"Creado","s":{"0":["Sistema"]}},{"id":"F112","m":"module-14","n":"Fecha Asignación BDC","s":{"0":["Sistema"]}},{"id":"F113","m":"module-14","n":"Canal","s":{"0":["Sistema"],"1":["BDC"]}},{"id":"F114","m":"module-14","n":"Proveedor","s":{"0":["Sistema"],"1":["BDC"]}},{"id":"F115","m":"module-14","n":"Fuente","s":{"0":["Sistema"],"1":["BDC"]}},{"id":"F116","m":"module-14","n":"Sitio Web","s":{"0":["Sistema"]}},{"id":"F117","m":"module-14","n":"Nombre de Formulario","s":{"0":["Sistema"]}},{"id":"F118","m":"module-14","n":"Agencia","s":{"0":["Sistema"]}},{"id":"F119","m":"module-15","n":"Tipo de Cliente","s":{}},{"id":"F120","m":"module-15","n":"Uso de Vehículo","s":{}},{"id":"F121","m":"module-15","n":"Buró de Crédito","s":{"1":["BDC"],"4":["APV"]}},{"id":"F122","m":"module-15","n":"Comprobante de Ingresos","s":{"1":["BDC"],"4":["APV"]}},{"id":"F123","m":"module-15","n":"Ingresos Mensuales","s":{"1":["BDC"],"4":["APV"]}},{"id":"F124","m":"module-15","n":"Pago Inicial Deseado","s":{"1":["BDC"],"4":["APV"]}},{"id":"F125","m":"module-15","n":"Mensualidades Deseadas","s":{"1":["BDC"],"4":["APV"]}},{"id":"F126","m":"module-15","n":"Ocupacion","s":{"1":["BDC"],"4":["APV"]}},{"id":"F127","m":"module-15","n":"Tipo de Financiamiento","s":{"1":["BDC"],"4":["APV"]}},{"id":"F128","m":"module-15","n":"Envio de Explicación de Cotizacion (inbound/outbound/digital)","s":{"1":["BDC"]}},{"id":"F129","m":"module-15","n":"Envio Cotizacion PDF (inbound/outbound/digital)","s":{"1":["BDC"]}},{"id":"F130","m":"module-15","n":"Notas Perfil Financiero","s":{"1":["BDC"],"4":["APV"]}},{"id":"F131","m":"module-15","n":"Seguro","s":{}},{"id":"F132","m":"module-15","n":"Garantia","s":{}},{"id":"F133","m":"module-15","n":"Numero de Pagos","s":{}},{"id":"F134","m":"module-15","n":"RFC Cliente","s":{}},{"id":"F135","m":"module-15","n":"Nacionalidad","s":{}},{"id":"F136","m":"module-15","n":"CURP","s":{}},{"id":"F137","m":"module-15","n":"Municipio","s":{}},{"id":"F138","m":"module-15","n":"Estado","s":{}},{"id":"F139","m":"module-15","n":"Colonia","s":{}},{"id":"F140","m":"module-15","n":"Calle","s":{}},{"id":"F141","m":"module-15","n":"Num Int","s":{}},{"id":"F142","m":"module-15","n":"Num Ext","s":{}},{"id":"F143","m":"module-15","n":"CP","s":{}},{"id":"F144","m":"module-15","n":"Regimen Fiscal","s":{}},{"id":"F145","m":"module-15","n":"Garantía","s":{}},{"id":"F146","m":"module-15","n":"Agencia Financiamiento","s":{}},{"id":"F147","m":"module-15","n":"Uso de CFDI","s":{}},{"id":"F148","m":"module-15","n":"Tipo de Seguro","s":{}},{"id":"F149","m":"module-15","n":"Entidad de Nacimiento","s":{}},{"id":"F150","m":"module-15","n":"Fecha de Nacimiento","s":{}},{"id":"F151","m":"module-15","n":"Género","s":{}},{"id":"F152","m":"module-15","n":"Enganche","s":{}},{"id":"F153","m":"module-15","n":"Fuente de Ingresos","s":{}},{"id":"F154","m":"module-15","n":"Plazo","s":{}},{"id":"F155","m":"module-16","n":"Al finalizar la visita a la agencia (mensaje de monitoreo)","s":{}},{"id":"F156","m":"module-17","n":"Llamada de 24 horas para hoja de una razon","s":{}},{"id":"F157","m":"module-17","n":"Llamada de 7 dias","s":{}},{"id":"F158","m":"module-17","n":"Llamada del 10 día por parte del BDC","s":{}},{"id":"F159","m":"module-18","n":"Identificación Oficial cotejada (INE - Pasaporte)","s":{"7":["APV"]}},{"id":"F160","m":"module-18","n":"Comprobante de domicilio cotejado (Teléfono - Luz)","s":{"7":["APV"]}},{"id":"F161","m":"module-18","n":"Constancia de Situación Fiscal CSF actualizada","s":{"7":["APV"]}},{"id":"F162","m":"module-18","n":"Buró de crédito","s":{"7":["APV"]}},{"id":"F163","m":"module-18","n":"CURP","s":{"8":["APV"]}},{"id":"F164","m":"module-18","n":"Acta constitutiva protocolizada ante notario público o copia certificada y No. de RPP y/o sector comercio (2 primeros hojas)","s":{"8":["APV"]}},{"id":"F165","m":"module-18","n":"Identificación Oficial Representante (INE - Pasaporte)","s":{"8":["APV"]}},{"id":"F166","m":"module-18","n":"Poder Notarial","s":{"8":["APV"]}},{"id":"F167","m":"module-18","n":"Comprobantes de anticipo en caja (apartado)","s":{"8":["APV"]}},{"id":"F168","m":"module-18","n":"Carta de Beneficios Integrales *","s":{"8":["APV"]}},{"id":"F169","m":"module-18","n":"Orden de compra (puede sustituir el dinero)","s":{"8":["APV"]}},{"id":"F170","m":"module-18","n":"Impresión hoja de Seguimiento (Lista de Espera) * Opcional","s":{"8":["APV"]}},{"id":"F171","m":"module-18","n":"Número de Pedido (ID automático) ID transversal","s":{"9":["APV"]}},{"id":"F172","m":"module-18","n":"Impresión Lista Negra (AMDA)","s":{"9":["APV"]}},{"id":"F173","m":"module-18","n":"Formato Ley Antilavado","s":{"9":["APV"]}},{"id":"F174","m":"module-18","n":"Expediente financiamiento (cuando aplique)","s":{"9":["APV"]}},{"id":"F175","m":"module-18","n":"Hoja de Seekop en estatus de facturación * Opcional","s":{"9":["APV"]}},{"id":"F176","m":"module-18","n":"Anexo A - Beneficiario controlador (PM)","s":{"9":["APV"]}},{"id":"F177","m":"module-18","n":"Comprobantes de pago enganche / liquidación de unidad / Trade In","s":{"10":["F&I"]}},{"id":"F178","m":"module-18","n":"Recibos de caja","s":{"10":["F&I"]}},{"id":"F179","m":"module-18","n":"Carta Bono Flexible * Opcional","s":{"10":["F&I"]}},{"id":"F180","m":"module-18","n":"Factura de la Unidad","s":{"10":["F&I"]}},{"id":"F181","m":"module-18","n":"Recibo oficial de placas y tenencia * Opcional","s":{"10":["F&I"]}},{"id":"F182","m":"module-18","n":"Recibo de pago de accesorios (si aplica)","s":{"10":["F&I"]}},{"id":"F183","m":"module-18","n":"Notas de crédito (si aplica)","s":{"10":["F&I"]}},{"id":"F184","m":"module-18","n":"Factura de accesorios","s":{"10":["F&I"]}},{"id":"F185","m":"module-18","n":"Factura de planta / origen","s":{"10":["F&I"]}},{"id":"F186","m":"module-18","n":"Carta de Instrucción de pago Seminuevos (solo cuando se compra internamente)","s":{"10":["F&I"]}},{"id":"F187","m":"module-18","n":"Notas de cargo y facturas adicionales (si aplica)","s":{"10":["F&I"]}},{"id":"F188","m":"module-18","n":"Salida de la unidad","s":{"10":["F&I"]}},{"id":"F189","m":"module-18","n":"Checklist de entrega homologado Grupo","s":{"10":["F&I"]}},{"id":"F190","m":"module-18","n":"Checklist de entrega (cada marca) * Opcional","s":{"10":["F&I"]}},{"id":"F191","m":"module-18","n":"Aviso de privacidad","s":{"10":["F&I"]}},{"id":"F192","m":"module-18","n":"Repuve","s":{"10":["F&I"]}},{"id":"F193","m":"module-18","n":"Contrato de Compra-Venta de unidad a cuenta","s":{"10":["F&I"]}},{"id":"F194","m":"module-18","n":"Previas Entrega Autos Nuevos","s":{"10":["F&I"]}},{"id":"F195","m":"module-18","n":"Carta de bienvenida","s":{"10":["F&I"]}},{"id":"F196","m":"module-18","n":"Carátula de póliza de seguro (Si Aplica)","s":{"10":["F&I"]}},{"id":"F197","m":"module-18","n":"Reporte a planta preliminar y el final","s":{"10":["F&I"]}},{"id":"F198","m":"module-18","n":"Carta poder cuando recoge la unidad un tercero (revisar reglas y validar con legal)","s":{"10":["F&I"]}},{"id":"F199","m":"module-18","n":"Checklist de traslado y recepción (Hoja viajera)","s":{"10":["F&I"]}}],"mods":{"module-0":"Información de Contacto","module-1":"Vehiculo","module-2":"Asignación","module-3":"Información del Lead / Oportunidad","module-4":"Prueba de Manejo","module-5":"Producto","module-6":"Pagos","module-7":"Cotización","module-8":"Perfil Cliente CDK","module-9":"Consulta y estilo de vida del cliente (opcionales para ver el equipo del BDC)","module-10":"Auto a Cuenta","module-11":"Cita","module-12":"Diferenciadores de Marca (si la marca no tiene, se omiten)","module-13":"Hoja de una Razón","module-14":"Integraciones","module-15":"Perfil Financiero","module-16":"Encuestas","module-17":"Happy Call","module-18":"Expediente Digital"},"touches":[{"stage":"Nuevo / En Contacto","channel":"Llamada","src":"Contact Plan CDK","brand":"Multimarca","id":"L1","t":"Primer Contacto Telefónico (Día 1)","when":"Día 1 — dentro de los primeros 10 minutos desde creación del lead en CRM","Momento / condición":"Lead digital CDK","Objetivo":"El cliente percibe atención inmediata y el asesor confirma interés y mejor medio de contacto. Registro CRM: marcar intento y resultado (contactado / no contesta) en el lead.","CTA / salida":"Agendar cita o dar disponibilidad para una llamada posterior","Guión / llamada":"Mensaje sugerido (11 Principios de Respuesta BDC, no es guión literal de CDK): dé su nombre y mejor forma de contacto; confirme vehículo de interés; ofrezca prueba de manejo; pregunte por cita hoy o mañana."},{"stage":"Nuevo / En Contacto","channel":"Vambe / WhatsApp","src":"Contact Plan CDK","brand":"Multimarca","id":"L2","t":"WhatsApp Vambe — Respuesta Automática (Día 1)","when":"Día 1 — inmediatamente después de las 2 llamadas dobles sin respuesta","Momento / condición":"Lead digital CDK","Objetivo":"El cliente recibe confirmación de que su solicitud fue recibida, pese a no contestar la llamada. Registro CRM: marcar envío de plantilla y actualizar estatus del lead.","CTA / salida":"Responder el mensaje o indicar disponibilidad","Mensaje / plantilla":"Sr. Srita. Ing. Lic. Sra. (Primer nombre del cliente). Hemos recibido su petición en cuanto a (Vehículo de interés, año, modelo, marca, tipo), este auto es una estupenda elección. Estaremos en contacto con usted. ¡Gracias! (Nombre del Asesor Digital)"},{"stage":"En Contacto","channel":"Llamada","src":"Contact Plan CDK","brand":"Multimarca","id":"L3","t":"Reintento Telefónico (Día 2)","when":"Día 2 — 2 llamadas dobles","Momento / condición":"Lead digital CDK","Objetivo":"El cliente siente seguimiento proactivo sin sentirse presionado. Registro CRM: marcar intento y resultado del Día 2.","CTA / salida":"Agendar cita o confirmar mejor horario de contacto","Guión / llamada":"Mensaje sugerido (11 Principios de Respuesta BDC): reafirme el vehículo de interés, genere expectativa profesional, pregunte por el mejor momento (hoy o mañana) para agendar."},{"stage":"Nuevo / En Contacto","channel":"Vambe / WhatsApp","src":"Contact Plan CDK","brand":"Multimarca","id":"L4","t":"WhatsApp Vambe — Plantilla Concienzudo (Día 2)","when":"Día 2 — inmediatamente después de las llamadas sin respuesta","Momento / condición":"Lead digital CDK","Objetivo":"El cliente percibe atención cuidadosa y respeto por su ritmo de decisión. Registro CRM: marcar envío de plantilla Concienzudo.","CTA / salida":"Responder el mensaje o indicar disponibilidad","Mensaje / plantilla":"(Nombre del Cliente) Le escribo rápidamente para asegurarme que recibió la información. Mi compromiso es proveer la información precisa. Ya que no he recibido respuesta, puedo asumir que está ocupado o no tiene preguntas en este momento. Para aclarar algunos puntos que le ayuden a tomar su decisión, ¿prefiere que tengamos una breve llamada?"},{"stage":"En Contacto","channel":"Llamada","src":"Contact Plan CDK","brand":"Multimarca","id":"L5","t":"Reintento Telefónico (Día 3)","when":"Día 3 — 2 llamadas dobles","Momento / condición":"Lead digital CDK","Objetivo":"El cliente conoce disponibilidad y opciones como nuevo gancho de valor. Registro CRM: marcar intento y resultado del Día 3.","CTA / salida":"Agendar cita para conocer el vehículo","Guión / llamada":"Mensaje sugerido (11 Principios de Respuesta BDC): incluya fotos/video del vehículo, cree urgencia profesional, invite a la agencia hoy o mañana."},{"stage":"Nuevo / En Contacto","channel":"Vambe / WhatsApp","src":"Contact Plan CDK","brand":"Multimarca","id":"L6","t":"WhatsApp Vambe — Plantilla Influyente (Día 3)","when":"Día 3 — inmediatamente después de las llamadas sin respuesta","Momento / condición":"Lead digital CDK","Objetivo":"El cliente recibe una invitación cercana y concreta a visitar la agencia. Registro CRM: marcar envío de plantilla Influyente.","CTA / salida":"Responder el mensaje o indicar disponibilidad","Mensaje / plantilla":"Hola \"Nombre del Cliente\" Quiero aprovechar esta oportunidad para darle las “Gracias” por permitirme ayudarle en la búsqueda del (AUTO) que, además de innovador es una ¡magnífica opción! No he tenido éxito para contactarle. Me encantaría que me avise antes de su llegada a la agencia, para preparar el auto, que esté reluciente y listo para su prueba de manejo. ¿Cuándo le veo en la agencia hoy o mañana"},{"stage":"En Contacto","channel":"Llamada","src":"Contact Plan CDK","brand":"Multimarca","id":"L7","t":"Reintento Telefónico (Día 4)","when":"Día 4 — 2 llamadas dobles","Momento / condición":"Lead digital CDK","Objetivo":"El cliente percibe paciencia y disponibilidad sin presión. Registro CRM: marcar intento y resultado del Día 4.","CTA / salida":"Agendar cita o confirmar interés","Guión / llamada":"Mensaje sugerido (11 Principios de Respuesta BDC): escuche lo que el cliente solicita, realice preguntas relevantes, reafirme necesidades detectadas."},{"stage":"Nuevo / En Contacto","channel":"Vambe / WhatsApp","src":"Contact Plan CDK","brand":"Multimarca","id":"L8","t":"WhatsApp Vambe — Plantilla Estable (Día 4)","when":"Día 4 — inmediatamente después de las llamadas sin respuesta","Momento / condición":"Lead digital CDK","Objetivo":"El cliente siente seguridad y ausencia de presión, con foco en su tranquilidad. Registro CRM: marcar envío de plantilla Estable.","CTA / salida":"Responder el mensaje o indicar disponibilidad","Mensaje / plantilla":"Nombre del cliente: Existe una línea muy delgada que separa a un cliente con atención persistente y uno molesto, por la insistencia y yo no quiero cruzar esa línea por ningún motivo. Sólo quiero asegurarme que sus necesidades sean satisfechas. Este auto tiene los más altos estándares de seguridad ya que se construye para protegerle a usted y su familia. Podemos agendar un tiempo conveniente para reunirnos a platicar y pueda manejar el (AUTO). Estoy a un mensaje de usted."},{"stage":"En Contacto","channel":"Llamada","src":"Contact Plan CDK","brand":"Multimarca","id":"L9","t":"Reintento Telefónico (Día 5, último de la semana 1)","when":"Día 5 — 2 llamadas dobles","Momento / condición":"Lead digital CDK","Objetivo":"Cierre directo del primer ciclo de contacto activo. Registro CRM: marcar intento y resultado del Día 5.","CTA / salida":"Agendar cita","Guión / llamada":"Mensaje sugerido (11 Principios de Respuesta BDC): realice la 'cita' directamente — pregunte por cita presencial o virtual, hoy o mañana, con lenguaje directo."},{"stage":"Nuevo / En Contacto","channel":"Vambe / WhatsApp","src":"Contact Plan CDK","brand":"Multimarca","id":"L10","t":"WhatsApp Vambe — Plantilla Dominante (Día 5)","when":"Día 5 — inmediatamente después de las llamadas sin respuesta","Momento / condición":"Lead digital CDK","Objetivo":"El cliente recibe un mensaje corto y directo con una acción clara. Registro CRM: marcar envío de plantilla Dominante; cierra el primer bloque de 5 días.","CTA / salida":"Responder el mensaje o indicar disponibilidad","Mensaje / plantilla":"Señor(a) (Nombre del Cliente) Sabemos que lo único constante en la vida es el cambio. Me doy cuenta que con el tiempo las situaciones cambian y quizás no esté listo para tomar una decisión en este momento. Usted debería tomar todo el tiempo que necesite para continuar su investigación. Claro, espero que cuando esté listo para tomar el siguiente paso, recuerde mi servicio puntual y buena disposición para proveerle de la mejor información que le ayude con este proceso."},{"stage":"En Contacto","channel":"Llamada","src":"Contact Plan CDK","brand":"Multimarca","id":"L11","t":"Escalamiento — Llamada Gerencia de Ventas (Día 7)","when":"Día 7 — llamada de Gerencia de Ventas","Momento / condición":"ESCALAMIENTO GERENCIAL — SIN RESPUESTA (DÍA 7 A DÍA 35)","Objetivo":"El cliente percibe una segunda oportunidad de contacto con mayor jerarquía. Registro CRM: marcar llamada gerencial Día 7 y resultado (contactado / no contesta).","CTA / salida":"Agendar cita o confirmar interés","Guión / llamada":"Mensaje sugerido (no hay guión literal de CDK para esta llamada): identifíquese como Gerencia de Ventas, mencione los intentos previos de contacto, reafirme beneficios de cliente digital y pregunte si continúa interesado."},{"stage":"Nuevo / En Contacto","channel":"Vambe / WhatsApp","src":"Contact Plan CDK","brand":"Multimarca","id":"L12","t":"WhatsApp Vambe — Plantilla No Respuesta (Día 7)","when":"Día 7 — inmediatamente después de la llamada de Gerencia de Ventas sin respuesta","Momento / condición":"ESCALAMIENTO GERENCIAL — SIN RESPUESTA (DÍA 7 A DÍA 35)","Objetivo":"El cliente recibe seguimiento digital tras la llamada gerencial sin respuesta. Registro CRM: marcar envío de plantilla No Respuesta Día 7.","CTA / salida":"Responder el mensaje o indicar disponibilidad","Mensaje / plantilla":"Estimado \"Nombre del Cliente\" Sé lo importante que es tomar una decisión informada. Por favor, hágame saber si existe algún dato adicional que pueda ser útil en su proceso de compra. Le menciono los beneficios que recibirá al ser un cliente por Internet: 1) Trámite digital, no es necesario salir de casa. 2) Prueba de manejo a domicilio. Nos preocupan mucho nuestros clientes digitales y queremos asegurar que esté completamente satisfecho. ¿Qué podemos hacer para cubrir a la perfección sus necesidades?"},{"stage":"En Contacto","channel":"Llamada","src":"Contact Plan CDK","brand":"Multimarca","id":"L13","t":"Escalamiento — Llamada Gerente BDC (Día 10)","when":"Día 10 — llamada de Gerente BDC","Momento / condición":"ESCALAMIENTO GERENCIAL — SIN RESPUESTA (DÍA 7 A DÍA 35)","Objetivo":"El cliente recibe un último intento de contacto humano antes de pasar a plantillas puramente digitales. Registro CRM: marcar llamada gerencial Día 10 y resultado (contactado / no contesta).","CTA / salida":"Agendar cita o confirmar interés","Guión / llamada":"Mensaje sugerido (no hay guión literal de CDK para esta llamada): identifíquese como Líder de BDC, retome el interés inicial del cliente y ofrezca resolver dudas pendientes."},{"stage":"Nuevo / En Contacto","channel":"Vambe / WhatsApp","src":"Contact Plan CDK","brand":"Multimarca","id":"L14","t":"WhatsApp Vambe — Plantilla (Día 10)","when":"Día 10 — inmediatamente después de la llamada del Gerente BDC sin respuesta","Momento / condición":"ESCALAMIENTO GERENCIAL — SIN RESPUESTA (DÍA 7 A DÍA 35)","Objetivo":"El cliente recibe seguimiento digital tras la llamada del Gerente BDC sin respuesta. Registro CRM: marcar envío de plantilla Día 10.","CTA / salida":"Responder el mensaje o indicar disponibilidad","Mensaje / plantilla":"Estimado \"Nombre del Cliente\" Ahora que conoce los beneficios de un cliente digital, es probable que tenga preguntas. Y mi responsabilidad es asegurar que sean aclaradas. Quisiera algunos datos para guiarlo en su compra, de esta forma podré comprenderlo mejor, ofreciendo información valiosa para su decisión. ¿Cuál es la característica más importante en la selección de su automóvil? ¿Por qué es esta característica importante? ¿Cuál el uso más frecuente que le va a dar al [Modelo]?"},{"stage":"En Contacto","channel":"Vambe / WhatsApp","src":"Contact Plan CDK","brand":"Multimarca","id":"L15","t":"WhatsApp Vambe — Plantilla No Respuesta (Día 14)","when":"Día 14","Momento / condición":"ESCALAMIENTO GERENCIAL — SIN RESPUESTA (DÍA 7 A DÍA 35)","Objetivo":"El cliente recibe una pregunta directa sobre su objeción principal. Registro CRM: marcar envío de plantilla Día 14.","CTA / salida":"Responder el mensaje indicando su principal objeción o interés","Mensaje / plantilla":"Estimado \"Nombre del Cliente\" Han pasado un par de semanas desde que usted expresó su interés en mí (Modelo). Sé que hay que realizar muchas consideraciones antes de tomar una decisión. Por lo cual quiero reafirmar mi compromiso de brindarle un servicio personalizado e información útil. Siéntase en libertad para decidir cuál es el tiempo necesario para finalizar este proceso y no se preocupe, yo estaré siempre disponible. ¿Qué puedo hacer para ayudarle y hacer de está, una experiencia única y satisfactoria?"},{"stage":"En Contacto","channel":"Vambe / WhatsApp","src":"Contact Plan CDK","brand":"Multimarca","id":"L16","t":"WhatsApp Vambe — Plantilla No Respuesta, firma Gerente de Ventas (Día 21)","when":"Día 21","Momento / condición":"ESCALAMIENTO GERENCIAL — SIN RESPUESTA (DÍA 7 A DÍA 35)","Objetivo":"El cliente percibe una segunda escalación de jerarquía junto con preguntas de diagnóstico. Registro CRM: marcar envío de plantilla Día 21 (GV).","CTA / salida":"Responder indicando en qué etapa del proceso se encuentra","Mensaje / plantilla":"Estimado \"Nombre del Cliente\": Al hablar con mi asesor __________, entiendo que ha expresado su interés en el (Modelo). Le escribo para agradecer la oportunidad de ayudarle. Me gustaría acompañarlo en esta experiencia de compra y saber, ¿en qué parte del proceso de compra se encuentra?, si apenas está empezando a considerar algunas opciones o está listo para tomar una decisión… Permítame preguntarle: ¿Si hubo alguna única razón por la cual ustedes no han dado el paso siguiente, cuál es esa única razón?"},{"stage":"En Contacto","channel":"Vambe / WhatsApp","src":"Contact Plan CDK","brand":"Multimarca","id":"L17","t":"WhatsApp Vambe — Plantilla No Respuesta (Día 28)","when":"Día 28","Momento / condición":"ESCALAMIENTO GERENCIAL — SIN RESPUESTA (DÍA 7 A DÍA 35)","Objetivo":"El cliente recibe empatía por el proceso de decisión y una oferta de guía sin presión, incluso si compra en otro lugar. Registro CRM: marcar envío de plantilla Día 28.","CTA / salida":"Responder indicando si sigue interesado o si ya tomó una decisión","Mensaje / plantilla":"EStimado, \"Nombre del cliente\" Entiendo que la compra de un auto puede ser difícil incluso hasta frustrante, ya que hay muchos pasos que dar y considerar. Si está realizando una investigación más profunda acerca de su compra, lo felicito. Esa es la manera correcta de hacer las cosas, la compra de un auto siempre tiene que ser sabia y concienzuda. Han pasado varias semanas desde su solicitud inicial y quiero decirle que estoy disponible para ayudarle a encontrar la selección perfecta. Dígame, ¿Qué puedo hacer por usted en este momento?"},{"stage":"En Contacto","channel":"Vambe / WhatsApp","src":"Contact Plan CDK","brand":"Multimarca","id":"L18","t":"WhatsApp Vambe — Plantilla No Respuesta, último intento (Día 35)","when":"Día 35","Momento / condición":"ESCALAMIENTO GERENCIAL — SIN RESPUESTA (DÍA 7 A DÍA 35)","Objetivo":"Cierre del ciclo con puerta abierta; el cliente sabe que puede escribir cuando quiera. Registro CRM: marcar envío de plantilla Día 35 (último intento).","CTA / salida":"Responder indicando mejor forma y horario de contacto","Mensaje / plantilla":"Estimado \"Nombre del Cliente\", Es posible que usted ya tomó la decisión de comprar o no comprar. Sea cual sea, quiero asegurarme de que todo lo que solicitó fue completado y le dimos el mejor de nuestros servicios. Esta es una decisión importante y debe estar seguro de que aquí hay un profesional para apoyarle. Puedo asegurarle que soy la persona correcta para este tipo de situaciones incluso si está pensando en comprar en otro lugar, le puedo guiar. ¿Cuál es la mejor manera de localizarlo durante el día?"},{"stage":"Nuevo / En Contacto","channel":"Administrativo","src":"Contact Plan CDK","brand":"Multimarca","id":"L19","t":"Descarte de Lead (fin del ciclo de 35 días)","when":"Día 35 — si no hubo respuesta a ningún toque","Momento / condición":"ESCALAMIENTO GERENCIAL — SIN RESPUESTA (DÍA 7 A DÍA 35)","Objetivo":"Cerrar formalmente el ciclo de contacto en CRM. Registro CRM: cambiar estatus del lead a Descartado/Retenido; el lead sale de este journey.","CTA / salida":"Ninguna (toque de cierre administrativo)"},{"stage":"En Contacto","channel":"Vambe / WhatsApp","src":"Contact Plan CDK","brand":"Multimarca","id":"L20","t":"Envío de Diferenciadores de Marca y Tarjeta Digital en Formato Imagen (al establecer contacto)","when":"Inmediato al lograr contacto efectivo, en cualquier día del ciclo (Día 1 a 35)","Momento / condición":"CONTACTO ESTABLECIDO Y AGENDAMIENTO (en cualquier día del ciclo)","Objetivo":"El cliente conoce la persona que lo está atendiendo + los diferenciadores de marca desde el primer contacto real. Registro CRM: marcar 'Diferenciadores de marca y tarjeta digital enviados' en el lead.","CTA / salida":"Ninguna (toque informativo)","Mensaje / plantilla":"Hola [nombre del cliente]. ¡Qué gusto saludarte!🤝 Soy Daniel Hernández, asesor de la agencia de KIA Bajío.🚗 Recibí tu solicitud de información de nuestros vehículos KIA. ¿Te gustaría continuar por mensaje o prefieres que te realice una llamada?","Guión / llamada":"Mensaje sugerido (11 Principios de Respuesta BDC): mencione los diferenciadores de memoria o envíe la imagen; deben ser los diferenciadores específicos que pide cada marca."},{"stage":"Cita Programada","channel":"Vambe / WhatsApp","src":"Contact Plan CDK","brand":"Multimarca","id":"C2","t":"Confirmación Inmediata de Cita — Vambe + e-mail","when":"Inmediato al generar la cita","Momento / condición":"FLUJO DE CITA Y CONFIRMACIÓN (Los recordatorios ya están automatizados en Vambe)","Objetivo":"El cliente confirma que su cita quedó registrada correctamente. Registro CRM: marcar 'Confirmación enviada' en la cita.","CTA / salida":"Confirmar recepción o reprogramar si hay algún inconveniente","Mensaje / plantilla":"Mensaje sugerido (no hay plantilla literal de CDK; estructura base de confirmación de cita): Hola {{nombre}}, {{asesor}}, de {{agencia}}, le confirma su cita para conocer el {{modelo}}: 📅 {{fecha_cita}} a las {{hora_cita}}, 📍 {{agencia}} - {{direccion_agencia}}. ¿Alguna duda? Responda aquí."},{"stage":"Cita Programada","channel":"Vambe / WhatsApp","src":"Contact Plan CDK","brand":"Multimarca","id":"C3","t":"Recordatorio D-1 — Vambe","when":"Día previo a la cita","Momento / condición":"FLUJO DE CITA Y CONFIRMACIÓN (Los recordatorios ya están automatizados en Vambe)","Objetivo":"El cliente recuerda su cita y confirma asistencia. Registro CRM: marcar 'Recordatorio D-1 enviado'.","CTA / salida":"Confirmar asistencia respondiendo 'SÍ'","Mensaje / plantilla":"“Tu próximo coche te espera” Hola {nombre_cliente}, buen día. Mañana puede ser el día en que conozcas tu próximo coche. Te esperamos en {agencia} a las {hora_cita} para presentarte el {vehiculo_interes}; {nombre_asesor} estará listo para acompañarte, resolver tus dudas y mostrarte los detalles que hacen la diferencia. Ubicación: {link_ubicacion} Nos dará gusto recibirte. 🚗 Botones: Confirmo asistencia Deseo reagendar Respuesta automática, Confirmo asistencia: ¡Gracias por confirmar, {nombre_cliente}! Mañana te esperamos en {agencia} para conocer el {vehiculo_interes}. Llega 10 min antes para que podamos recibirte con calma y aprovechar mejor tu visita. Respuesta automática, Deseo reagendar: Entendido, {nombre_cliente}. Indicame dia y hora en que deseas asistir."},{"stage":"Cita Programada","channel":"Vambe / WhatsApp","src":"Contact Plan CDK","brand":"Multimarca","id":"C4","t":"Recordatorio Mismo Día (4–2 hrs antes) — Vambe","when":"Mismo día de la cita, entre 4 y 2 horas antes","Momento / condición":"FLUJO DE CITA Y CONFIRMACIÓN (Los recordatorios ya están automatizados en Vambe)","Objetivo":"El cliente llega con la cita presente y sin fricción de último momento. Registro CRM: marcar 'Recordatorio mismo día enviado'.","CTA / salida":"Ninguna (informativo, refuerza asistencia)","Mensaje / plantilla":"Hola {nombre_cliente}, buen día. Soy {nombre_gerente}, gerente de {agencia}. Hoy es el día para conocer de cerca el {vehiculo_interes}. Te esperamos a las {hora_cita}; {nombre_asesor} estará listo para acompañarte, resolver tus dudas y mostrarte los detalles que pueden hacer de este vehículo tu próxima gran decisión. Ubicación: {link_ubicacion} Nos dará mucho gusto recibirte. 🚗✨ Botones: Confirmo asistencia Deseo reagendar Respuesta automática, Confirmo asistencia: ¡Excelente, {nombre_cliente}! Gracias por confirmar. Te esperamos hoy en {agencia} para conocer el {vehiculo_interes}. Llega 10 min antes para recibirte con calma y aprovechar mejor tu visita. Respuesta automática, Deseo reagendar: Entendido, {nombre_cliente}. Indicame dia y hora en que deseas asistir para reagendar tu visita de inmediato."},{"stage":"Cita Programada","channel":"Llamada","src":"Contact Plan CDK","brand":"Multimarca","id":"NS1","t":"No Show — Llamada Líder BDC","when":"Día de la cita (no-show), mismo día o siguiente hábil","Momento / condición":"NO SHOW","Objetivo":"El cliente siente acompañamiento genuino tras faltar a su cita, sin reproche. Registro CRM: marcar intento de llamada de No Show y resultado.","CTA / salida":"Reagendar la visita o indicar que ya no está interesado","Guión / llamada":"Mensaje sugerido (no se proporcionó guión literal, adaptado del mensaje de WhatsApp de No Show que sí es literal): preséntese como líder BDC/de la marca y agencia; mencione que se intentó contactar por la cita de ayer no atendida; pregunte si sigue interesado o prefiere reagendar; ofrezca hoy o mañana."},{"stage":"Cita Programada","channel":"Vambe / WhatsApp","src":"Contact Plan CDK","brand":"Multimarca","id":"NS2","t":"No Show — WhatsApp Vambe (si no contesta la llamada)","when":"Inmediatamente después de la llamada de No Show sin respuesta","Momento / condición":"NO SHOW","Objetivo":"El cliente recibe una invitación empática a reagendar, sin tono acusatorio. Registro CRM: marcar envío de mensaje de No Show.","CTA / salida":"Reagendar para hoy o mañana, o compartir el motivo de la inasistencia","Mensaje / plantilla":"Hola. ¡Es un gusto saludarle! Mi nombre es {{asesor}}, líder de {{agencia}}. Para nosotros es muy importante brindarle una atención de calidad y acompañarle durante todo su proceso de búsqueda de vehículo. Intenté comunicarme con usted en varias ocasiones, ya que el día de ayer teníamos programada una cita en nuestra agencia, pero no tuvimos el gusto de recibir su visita. Entendemos que pueden surgir imprevistos o cambios de planes. Por ello, me gustaría saber si continúa interesado(a) en conocer nuestros vehículos o si prefiere que le apoyemos en una fecha y horario más convenientes para usted. De igual manera, si considera que la cita no era adecuada para sus necesidades, agradeceremos mucho que nos lo comparta para poder mejorar nuestra atención. ¿Le gustaría reagendar su visita para el día de hoy o para mañana?"},{"stage":"Cita Programada","channel":"Administrativo","src":"Contact Plan CDK","brand":"Multimarca","id":"P1","t":"Entra a Journey de Piso (CDK)","when":"Al momento de asistir a la cita en agencia","Momento / condición":"SALIDA DEL JOURNEY","Objetivo":"El lead pasa de responsabilidad BDC a responsabilidad de Piso. Registro CRM: cambiar etapa del lead de 'Contacto' a 'Oportunidad en Piso'; este journey termina aquí.","CTA / salida":"N/A"},{"stage":"En Recepción","channel":"Presencial","src":"Touch Points Piso","brand":"Multimarca","id":"P1","t":"Bienvenida y Recepción en Piso","when":"Llegada del cliente a la agencia","Momento / condición":"RECEPCIÓN Y REGISTRO EN PISO","Objetivo":"Llegada del cliente a la agencia","CTA / salida":"Por definir"},{"stage":"En Recepción","channel":"Presencial","src":"Touch Points Piso","brand":"Multimarca","id":"P2","t":"Consulta de Motivo de Visita y Verificación/Registro","when":"Registro del cliente en recepción / alta en CRM","Momento / condición":"RECEPCIÓN Y REGISTRO EN PISO","Objetivo":"Registro del cliente en recepción / alta en CRM","CTA / salida":"Por definir"},{"stage":"En Recepción","channel":"Presencial","src":"Touch Points Piso","brand":"Multimarca","id":"P3","t":"Presentación del Asesor Asignado","when":"Asignación del asesor en el CRM","Momento / condición":"RECEPCIÓN Y REGISTRO EN PISO","Objetivo":"Asignación del asesor en el CRM","CTA / salida":"Por definir"},{"stage":"En Recepción","channel":"Presencial","src":"Touch Points Piso","brand":"Multimarca","id":"P4","t":"Detección de Necesidades","when":"Inicio de la atención con el asesor","Momento / condición":"DETECCIÓN DE NECESIDADES Y DEMOSTRACIÓN (En Recepción)","Objetivo":"Inicio de la atención con el asesor","CTA / salida":"Por definir"},{"stage":"En Recepción","channel":"Vambe / WhatsApp","src":"Touch Points Piso","brand":"Multimarca","id":"P5","t":"Agradecimiento por la Visita + Validación de Datos + Video del Vehículo de Interés","when":"Cierre de la visita y captura de datos de contacto en CRM","Momento / condición":"DETECCIÓN DE NECESIDADES Y DEMOSTRACIÓN (En Recepción)","Objetivo":"Cierre de la visita y captura de datos de contacto en CRM","CTA / salida":"Por definir"},{"stage":"En Recepción","channel":"Presencial","src":"Touch Points Piso","brand":"Multimarca","id":"P6","t":"Demostración Estática","when":"Avance a la etapa de demostración del vehículo","Momento / condición":"DETECCIÓN DE NECESIDADES Y DEMOSTRACIÓN (En Recepción)","Objetivo":"Avance a la etapa de demostración del vehículo","CTA / salida":"Por definir"},{"stage":"Prueba de manejo","channel":"Presencial","src":"Touch Points Piso","brand":"Multimarca","id":"P7","t":"Oferta y Agenda de Prueba de Manejo","when":"Acuerdo con el cliente para agendar la prueba de manejo","Momento / condición":"DETECCIÓN DE NECESIDADES Y DEMOSTRACIÓN (En Recepción)","Objetivo":"Acuerdo con el cliente para agendar la prueba de manejo","CTA / salida":"Por definir"},{"stage":"Prueba de manejo","channel":"Vambe / WhatsApp","src":"Touch Points Piso","brand":"Multimarca","id":"P8","t":"Recordatorio de Cita de Prueba de Manejo","when":"24 h antes de la cita de prueba de manejo agendada en CRM","Momento / condición":"DETECCIÓN DE NECESIDADES Y DEMOSTRACIÓN (En Recepción)","Objetivo":"24 h antes de la cita de prueba de manejo agendada en CRM","CTA / salida":"Por definir"},{"stage":"Prueba de manejo","channel":"Correo","src":"Touch Points Piso","brand":"Multimarca","id":"P9","t":"Encuesta Inmediata Post-Prueba de Manejo","when":"Evento \"Prueba de manejo completada\" en CRM (Dynamics 365 / Customer Voice)","Momento / condición":"DETECCIÓN DE NECESIDADES Y DEMOSTRACIÓN (En Recepción)","Objetivo":"Evento \"Prueba de manejo completada\" en CRM (Dynamics 365 / Customer Voice)","CTA / salida":"Por definir"},{"stage":"Prueba de manejo","channel":"Vambe / WhatsApp","src":"Touch Points Piso","brand":"Multimarca","id":"P10","t":"Seguimiento Post-Prueba de Manejo + Contenido de Valor","when":"24-48 h después de la prueba de manejo sin decisión de compra","Momento / condición":"DETECCIÓN DE NECESIDADES Y DEMOSTRACIÓN (En Recepción)","Objetivo":"24-48 h después de la prueba de manejo sin decisión de compra","CTA / salida":"Por definir"},{"stage":"Apartado","channel":"Vambe / WhatsApp","src":"Touch Points Piso","brand":"Multimarca","id":"P11","t":"Solicitud y Pago de Apartado","when":"Decisión del cliente de reservar el vehículo","Momento / condición":"APARTADO (Apartado)","Objetivo":"Decisión del cliente de reservar el vehículo","CTA / salida":"Por definir"},{"stage":"Apartado","channel":"Vambe / WhatsApp","src":"Touch Points Piso","brand":"Multimarca","id":"P12","t":"Envío de Liga de Pago para Apartado","when":"Solicitud de apartado confirmada (configurador OpenPay)","Momento / condición":"APARTADO (Apartado)","Objetivo":"Solicitud de apartado confirmada (configurador OpenPay)","CTA / salida":"Por definir"},{"stage":"Apartado","channel":"Correo","src":"Touch Points Piso","brand":"Multimarca","id":"P13","t":"Confirmación de Pago de Apartado Recibido","when":"Notificación de pago exitoso en OpenPay / CRM","Momento / condición":"APARTADO (Apartado)","Objetivo":"Notificación de pago exitoso en OpenPay / CRM","CTA / salida":"Por definir"},{"stage":"Apartado","channel":"Llamada","src":"Touch Points Piso","brand":"Multimarca","id":"P14","t":"Aviso de Disponibilidad / Lista de Espera","when":"Actualización de disponibilidad de unidad en el sistema de inventario","Momento / condición":"APARTADO (Apartado)","Objetivo":"Actualización de disponibilidad de unidad en el sistema de inventario","CTA / salida":"Por definir"},{"stage":"Apartado","channel":"Vambe / WhatsApp","src":"Touch Points Piso","brand":"Multimarca","id":"P15","t":"Aviso de Asignación de Vehículo","when":"Asignación de VIN / unidad específica en el sistema","Momento / condición":"APARTADO (Apartado)","Objetivo":"Asignación de VIN / unidad específica en el sistema","CTA / salida":"Por definir"},{"stage":"Apartado","channel":"Vambe / WhatsApp","src":"Touch Points Piso","brand":"Multimarca","id":"P16","t":"Alerta de Vencimiento de Plazo en Lista de Espera","when":"Días previos al vencimiento del plazo de espera (regla de negocio)","Momento / condición":"APARTADO (Apartado)","Objetivo":"Días previos al vencimiento del plazo de espera (regla de negocio)","CTA / salida":"Por definir"},{"stage":"Cotización","channel":"Presencial","src":"Touch Points Piso","brand":"Multimarca","id":"P17","t":"Entrega de Cotización (Contado / Financiamiento)","when":"Solicitud del cliente de cotización formal","Momento / condición":"COTIZACIÓN","Objetivo":"Solicitud del cliente de cotización formal","CTA / salida":"Por definir"},{"stage":"Cotización","channel":"Correo","src":"Touch Points Piso","brand":"Multimarca","id":"P18","t":"Envío de Cotización Formal por Correo Electrónico","when":"Generación de la cotización en el sistema","Momento / condición":"COTIZACIÓN","Objetivo":"Generación de la cotización en el sistema","CTA / salida":"Por definir"},{"stage":"Cotización","channel":"Vambe / WhatsApp","src":"Touch Points Piso","brand":"Multimarca","id":"P19","t":"Seguimiento Post-Cotización sin Decisión","when":"X días sin respuesta después del envío de la cotización","Momento / condición":"COTIZACIÓN","Objetivo":"X días sin respuesta después del envío de la cotización","CTA / salida":"Por definir"},{"stage":"Cotización","channel":"Presencial","src":"Touch Points Piso","brand":"Multimarca","id":"P20","t":"Solicitud de Documentos para Expediente","when":"Decisión de compra confirmada / apertura de expediente","Momento / condición":"COTIZACIÓN","Objetivo":"Decisión de compra confirmada / apertura de expediente","CTA / salida":"Por definir"},{"stage":"Cotización","channel":"Vambe / WhatsApp","src":"Touch Points Piso","brand":"Multimarca","id":"P21","t":"Recordatorio de Documentación Pendiente/Faltante","when":"Expediente incompleto después de X días","Momento / condición":"COTIZACIÓN","Objetivo":"Expediente incompleto después de X días","CTA / salida":"Por definir"},{"stage":"Financiamiento","channel":"Llamada","src":"Touch Points Piso","brand":"Multimarca","id":"P22","t":"Notificación de Aprobación de Crédito","when":"Respuesta de la financiera/banco registrada en CRM","Momento / condición":"VALIDACIÓN DE CRÉDITO / FINANCIAMIENTO (SI APLICA) (Financiamiento)","Objetivo":"Respuesta de la financiera/banco registrada en CRM","CTA / salida":"Por definir"},{"stage":"Financiamiento","channel":"Vambe / WhatsApp","src":"Touch Points Piso","brand":"Multimarca","id":"P23","t":"Solicitud de Depósito de Enganche","when":"Aprobación de crédito confirmada","Momento / condición":"VALIDACIÓN DE CRÉDITO / FINANCIAMIENTO (SI APLICA) (Financiamiento)","Objetivo":"Aprobación de crédito confirmada","CTA / salida":"Por definir"},{"stage":"Financiamiento","channel":"Correo","src":"Touch Points Piso","brand":"Multimarca","id":"P24","t":"Comprobante de Pago por Correo (enganche)","when":"Pago de enganche confirmado","Momento / condición":"VALIDACIÓN DE CRÉDITO / FINANCIAMIENTO (SI APLICA) (Financiamiento)","Objetivo":"Pago de enganche confirmado","CTA / salida":"Por definir"},{"stage":"Financiamiento","channel":"Llamada","src":"Touch Points Piso","brand":"Multimarca","id":"P25","t":"Cita y Confirmación de Firma de Contrato de Financiamiento","when":"Enganche pagado y documentación completa","Momento / condición":"VALIDACIÓN DE CRÉDITO / FINANCIAMIENTO (SI APLICA) (Financiamiento)","Objetivo":"Enganche pagado y documentación completa","CTA / salida":"Por definir"},{"stage":"Pedido","channel":"Correo","src":"Touch Points Piso","brand":"Multimarca","id":"P26","t":"Firma de Pedido - Condiciones Comerciales (DocuSign)","when":"Aprobación final de condiciones comerciales","Momento / condición":"PEDIDO Y ASIGNACIÓN DE LA UNIDAD","Objetivo":"Aprobación final de condiciones comerciales","CTA / salida":"Por definir"},{"stage":"Facturación","channel":"Vambe / WhatsApp","src":"Touch Points Piso","brand":"Multimarca","id":"P27","t":"Validación de Prefactura con el Cliente","when":"Generación de la prefactura en el sistema de facturación","Momento / condición":"FACTURACIÓN","Objetivo":"Generación de la prefactura en el sistema de facturación","CTA / salida":"Por definir"},{"stage":"Facturación","channel":"Correo","src":"Touch Points Piso","brand":"Multimarca","id":"P28","t":"Envío de Confirmación de Datos de Facturación Validados por Correo","when":"Confirmación del cliente sobre los datos de la prefactura","Momento / condición":"FACTURACIÓN","Objetivo":"Confirmación del cliente sobre los datos de la prefactura","CTA / salida":"Por definir"},{"stage":"Facturación","channel":"Vambe / WhatsApp","src":"Touch Points Piso","brand":"Multimarca","id":"P29","t":"Actualización de Estatus (Facturación y Preparación de Unidad)","when":"Cambio de estatus en el proceso de facturación / preparación de unidad","Momento / condición":"FACTURACIÓN","Objetivo":"Cambio de estatus en el proceso de facturación / preparación de unidad","CTA / salida":"Por definir"},{"stage":"Entrega","channel":"Llamada","src":"Touch Points Piso","brand":"Multimarca","id":"P30","t":"Programación y Confirmación de Fecha de Entrega","when":"Unidad facturada y lista para entrega","Momento / condición":"ENTREGA DEL AUTO","Objetivo":"Unidad facturada y lista para entrega","CTA / salida":"Por definir"},{"stage":"Entrega","channel":"Vambe / WhatsApp","src":"Touch Points Piso","brand":"Multimarca","id":"P31","t":"Recordatorio D-1 de Entrega","when":"1 día antes de la fecha de entrega agendada","Momento / condición":"ENTREGA DEL AUTO","Objetivo":"1 día antes de la fecha de entrega agendada","CTA / salida":"Por definir"},{"stage":"Entrega","channel":"Vambe / WhatsApp","src":"Touch Points Piso","brand":"Multimarca","id":"P32","t":"Recordatorio Mismo Día de Entrega","when":"Mañana del día de entrega","Momento / condición":"ENTREGA DEL AUTO","Objetivo":"Mañana del día de entrega","CTA / salida":"Por definir"},{"stage":"Entrega","channel":"Presencial","src":"Touch Points Piso","brand":"Multimarca","id":"P33","t":"Pago Final y Pase de Salida","when":"Llegada del cliente a recoger el vehículo","Momento / condición":"ENTREGA DEL AUTO","Objetivo":"Llegada del cliente a recoger el vehículo","CTA / salida":"Por definir"},{"stage":"Entrega","channel":"Correo","src":"Touch Points Piso","brand":"Multimarca","id":"P34","t":"Comprobante de Pago por Correo (pago final)","when":"Pago final confirmado","Momento / condición":"ENTREGA DEL AUTO","Objetivo":"Pago final confirmado","CTA / salida":"Por definir"},{"stage":"Entrega","channel":"Presencial","src":"Touch Points Piso","brand":"Multimarca","id":"P35","t":"Llegada, Firma y Entrega Emotiva del Vehículo","when":"Firma de entrega completada","Momento / condición":"ENTREGA DEL AUTO","Objetivo":"Firma de entrega completada","CTA / salida":"Por definir"},{"stage":"Entrega","channel":"Presencial","src":"Touch Points Piso","brand":"Multimarca","id":"P36","t":"Despedida del Cliente","when":"Fin del proceso de entrega","Momento / condición":"ENTREGA DEL AUTO","Objetivo":"Fin del proceso de entrega","CTA / salida":"Por definir"},{"stage":"Postventa","channel":"Correo","src":"Touch Points Piso","brand":"Multimarca","id":"P37","t":"Pulso Post-Visita (Encuesta de Experiencia)","when":"X días después de la entrega del vehículo (evento \"entrega completada\" en CRM)","Momento / condición":"CIERRE Y MEDICIÓN DE EXPERIENCIA","Objetivo":"X días después de la entrega del vehículo (evento \"entrega completada\" en CRM)","CTA / salida":"Por definir"},{"stage":"Nuevo","channel":"Vambe / WhatsApp","src":"Creatio actual","brand":"HYUNDAI, HONDA, KIA","id":"CR1","t":"Dentro de las configuraciones de la campaña, se pueden agregar si alguna campaña su primer contacto a traves de vambe.","when":"Inmediatamente que se genera el lead","Momento / condición":"Automatización actual CRM","Objetivo":"Dentro de las configuraciones de la campaña, se pueden agregar si alguna campaña su primer contacto a traves de vambe.","CTA / salida":"Por definir"},{"stage":"Nuevo","channel":"Vambe / WhatsApp","src":"Creatio actual","brand":"CHANGAN","id":"CR2","t":"Se envia una plantilla fija a todos los leads que entran y se envia el seguimiento a SALE U, para cortar el tiempo de atención","when":"Inmediatamente que se genera el lead","Momento / condición":"Automatización actual CRM","Objetivo":"Se envia una plantilla fija a todos los leads que entran y se envia el seguimiento a SALE U, para cortar el tiempo de atención","CTA / salida":"Por definir"},{"stage":"Nuevo","channel":"Vambe / WhatsApp","src":"Creatio actual","brand":"BYD, GWM","id":"CR3","t":"Se envia una plantilla fiija","when":"Inmediatamente que se genera el lead, pero en horario entre 19:00 y 08:00","Momento / condición":"Automatización actual CRM","Objetivo":"Se envia una plantilla fiija","CTA / salida":"Por definir"},{"stage":"Cita Programada · No asistió","channel":"Vambe / WhatsApp","src":"Creatio actual","brand":"NISSAN, INFINITI, HYUNDAI, HONDA, GWM, GO RIDERS, CHANGAN, BYD, ACURA, KIA (solo poliforum)","id":"CR4","t":"Se envia una plantilla fiija y se registra la cita en caso de reagendamiento","when":"24 hrs después del no show","Momento / condición":"Automatización actual CRM","Objetivo":"Se envia una plantilla fiija y se registra la cita en caso de reagendamiento","CTA / salida":"Por definir"},{"stage":"Financiamiento","channel":"Twilio","src":"Creatio actual","brand":"KIA","id":"CR5","t":"Notifica al cliente que se ha recibido su solicitud de credito y recuerda los beneficios","when":"etapa del financiamiento = analisis y tipo de vehiculo = nuevo","Momento / condición":"Automatización actual CRM","Objetivo":"Notifica al cliente que se ha recibido su solicitud de credito y recuerda los beneficios","CTA / salida":"Por definir"},{"stage":"Financiamiento","channel":"Twilio","src":"Creatio actual","brand":"KIA","id":"CR6","t":"Notifica al cliente que se ha recibido su solicitud de credito y recuerda los beneficios","when":"etapa del financiamiento = analisis y tipo de vehiculo = semis","Momento / condición":"Automatización actual CRM","Objetivo":"Notifica al cliente que se ha recibido su solicitud de credito y recuerda los beneficios","CTA / salida":"Por definir"},{"stage":"Financiamiento","channel":"Twilio","src":"Creatio actual","brand":"KIA","id":"CR7","t":"Notifica al cliente que su solicitud de crédito necesita más información y que un asesor se pondrá en contacto","when":"etapa del financiamiento = Crédito condicionado y tipo de vehiculo = nuevo","Momento / condición":"Automatización actual CRM","Objetivo":"Notifica al cliente que su solicitud de crédito necesita más información y que un asesor se pondrá en contacto","CTA / salida":"Por definir"},{"stage":"Financiamiento","channel":"Twilio","src":"Creatio actual","brand":"KIA","id":"CR8","t":"Notifica al cliente que su solicitud de crédito necesita más información y que un asesor se pondrá en contacto","when":"etapa del financiamiento = Crédito condicionado y tipo de vehiculo = seminuevo","Momento / condición":"Automatización actual CRM","Objetivo":"Notifica al cliente que su solicitud de crédito necesita más información y que un asesor se pondrá en contacto","CTA / salida":"Por definir"},{"stage":"Financiamiento","channel":"Twilio","src":"Creatio actual","brand":"KIA","id":"CR9","t":"Notifica al cliente que su solicitud de crédito fue aprobada","when":"etapa del financiamiento = Crédito aprobado y tipo de vehiculo = seminuevo","Momento / condición":"Automatización actual CRM","Objetivo":"Notifica al cliente que su solicitud de crédito fue aprobada","CTA / salida":"Por definir"},{"stage":"Financiamiento","channel":"Twilio","src":"Creatio actual","brand":"KIA","id":"CR10","t":"Notifica al cliente que su solicitud de crédito fue aprobada","when":"etapa del financiamiento = Crédito aprobado y tipo de vehiculo = nuevo","Momento / condición":"Automatización actual CRM","Objetivo":"Notifica al cliente que su solicitud de crédito fue aprobada","CTA / salida":"Por definir"},{"stage":"Financiamiento","channel":"Llamada","src":"Creatio actual","brand":"KIA","id":"CR11","t":"Se programan una llamada a los 3 días, 10 días, 3 meses, 5 meses, 1 año y 3 años","when":"Entrega del vehiculo","Momento / condición":"Automatización actual CRM","Objetivo":"Se programan una llamada a los 3 días, 10 días, 3 meses, 5 meses, 1 año y 3 años","CTA / salida":"Por definir"}]}</script>
+
+<script>
+'use strict';
+/* ============================================================================
+   A. DATOS DEL JOURNEY Y CATÁLOGOS
+   ============================================================================ */
+const DATA = JSON.parse(document.getElementById('journey-data').textContent);
+DATA.touches.forEach((t, i) => { t.key = i; });   // P1 aparece 2 veces → usamos índice como llave única
+
+/** Etapas principales del journey (Apartado ya NO es etapa: es transversal).
+ *  col = columna de la matriz de campos; obj = objeto Dynamics que la contiene;
+ *  owner = rol responsable principal; touchStages = etapas de toques que aplican. */
+const STAGES = [
+  { key:'nuevo',      name:'Nuevo',                  col:0,  obj:'Lead',        owner:'BDC',     touchStages:['Nuevo','Nuevo / En Contacto'] },
+  { key:'contacto',   name:'En Contacto',            col:1,  obj:'Lead',        owner:'BDC',     touchStages:['Nuevo / En Contacto','En Contacto'] },
+  { key:'cita',       name:'Cita Programada',        col:2,  obj:'Lead',        owner:'BDC',     touchStages:['Cita Programada','Cita Programada · No asistió'] },
+  { key:'recepcion',  name:'En Recepción',           col:3,  obj:'Lead',        owner:'Hostess', touchStages:['En Recepción'] },
+  { key:'atendido',   name:'Atendido por un asesor', col:4,  obj:'Oportunidad', owner:'APV',     touchStages:[] },
+  { key:'cotizacion', name:'Cotización',             col:7,  obj:'Cotización',  owner:'APV',     touchStages:['Cotización'] },
+  { key:'pedido',     name:'Pedido',                 col:8,  obj:'Pedido',      owner:'APV',     touchStages:['Pedido'] },
+  { key:'facturacion',name:'Facturación',            col:9,  obj:'Facturación', owner:'F&I',     touchStages:['Facturación'] },
+  { key:'entrega',    name:'Entrega',                col:10, obj:'Entrega',     owner:'F&I',     touchStages:['Entrega','Postventa'] },
+];
+
+/** Transversales: pueden ocurrir en paralelo a la etapa principal. */
+const TRANSVERSALS = [
+  { key:'apartado', name:'Apartado',           col:5,    touchStages:['Apartado'],         window:'Nuevo → antes de Cotización' },
+  { key:'prueba',   name:'Prueba de manejo',   col:6,    touchStages:['Prueba de manejo'], window:'Transversal' },
+  { key:'fin',      name:'Financiamiento',     mod:'module-15', touchStages:['Financiamiento'], window:'Transversal' },
+  { key:'cuenta',   name:'Auto a cuenta',      mod:'module-10', touchStages:[],            window:'Transversal' },
+  { key:'exp',      name:'Expediente digital', mod:'module-18', touchStages:[],            window:'Cotización → Entrega' },
+  { key:'log',      name:'Logística',          mod:null,  touchStages:[],                   window:'Post Facturación / pre Entrega' },
+];
+
+/** Roles del journey. El switch superior cambia cola de trabajo, campos editables y vista inicial. */
+const ROLES = [
+  { key:'BDC',      user:'Ana Ruiz',      home:'home' },
+  { key:'Hostess',  user:'Paola Ríos',    home:'recepcion' },
+  { key:'APV',      user:'Jorge Salinas', home:'home' },
+  { key:'F&I',      user:'Laura Cano',    home:'home' },
+  { key:'Gerencia', user:'Ricardo Torres',home:'home' },
+];
+
+/** Cadencia de no-respuesta (Contact Plan CDK): ids de toque + día del ciclo de 35 días. */
+const CADENCE = [
+  ['L1',1],['L2',1],['L3',2],['L4',2],['L5',3],['L6',3],['L7',4],['L8',4],['L9',5],['L10',5],
+  ['L11',7],['L12',7],['L13',10],['L14',10],['L15',14],['L16',21],['L17',28],['L18',35],['L19',35],
+].map(([id, day]) => ({ id, day, touch: DATA.touches.find(t => t.id === id && t.src === 'Contact Plan CDK') }));
+
+/** Catálogo de fuentes reconocidas por los dispatchers (leads-api.md §9). */
+const SOURCES = ['web_form','facebook_lead_ad','google_lead_form','mercadolibre','inconcert','vambe','biky','dynamics','dealer_on','sales_u','seekop','zenvia','salesforce_hyundai','salesforce_toyota','mi_autocom','financiamiento','maxi_publica','semi_nuevos','gubagoo','sales_manago','tiktok_lead_ad','whatsapp','creatio_hub','zapier','at_plus_piso'];
+
+/** form_name → lead_intent (leads-api.md §4.1). */
+const FORM_INTENT = {
+  'VDP - ME INTERESA':'inquiry','VDP - AGENDA VISITA':'appointment','VDP - AGENDA VIDEOLLAMADA':'appointment','Event-Assistant':'appointment',
+  'COMPRAMOS TU AUTO':'trade_in','COMPRAMOS TU AUTO - CON CITA':'trade_in','VENDE TU AUTO - EASY':'sell_easy','COMPRAMOS TU AUTO - EASY':'sell_easy',
+  'VDP - LATINID CREDIT':'financing','FLOTILLAS':'fleet','APARTADO (LEAD)':'purchase','PISO - WALK IN':'inquiry',
+};
+const BRANDS = { KIA:['Seltos','Sportage','K3','Sonet'], NISSAN:['Versa','Kicks','X-Trail','Sentra'], HYUNDAI:['Tucson','Creta','HB20'], HONDA:['HR-V','CR-V','City'], BYD:['Dolphin','Seal','Song Plus'], GWM:['Haval Jolion','Haval H6','Poer'], CHANGAN:['CS55 Plus','Alsvin','UNI-T'], TOYOTA:['Corolla','RAV4','Hilux'], ACURA:['RDX','Integra'] };
+const AGENCIES = { KIA:'KIA Poliforum', NISSAN:'Nissan Universidad', HYUNDAI:'Hyundai Juriquilla', HONDA:'Honda Bajío', BYD:'BYD Querétaro', GWM:'GWM León', CHANGAN:'Changan Celaya', TOYOTA:'Toyota Valle', ACURA:'Acura Bajío' };
+const BDC_AGENTS = ['Ana Ruiz','Luis Ortega','Carla Méndez'];
+const FLOOR_AGENTS = ['Jorge Salinas','Mariana Vega','Diego Paredes','Sofía Lara'];
+
+/* ============================================================================
+   B. UTILIDADES
+   ============================================================================ */
+const $ = (sel, root = document) => root.querySelector(sel);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const icon = (n, cls = '') => `<svg class="i ${cls}"><use href="#i-${n}"/></svg>`;
+const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c==='x'?r:(r&3|8)).toString(16); }));
+const initials = l => (l.first[0] + (l.last[0] || '')).toUpperCase();
+const fullName = l => `${l.first} ${l.last}`.trim();
+const roleCls = r => r.replace(/\s*\(lectura\)/, '').replace('F&I', 'FI');
+const NOW = Date.now();
+const fmtDate = ts => new Date(ts).toLocaleString('es-MX', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+const fmtAgo = ts => { const m = Math.round((Date.now() - ts) / 60000); if (m < 60) return `hace ${m} min`; const h = Math.round(m/60); if (h < 24) return `hace ${h} h`; return `hace ${Math.round(h/24)} d`; };
+/** Teléfono: el middleware NO normaliza (leads-api.md §8) → el CRM normaliza a 10 dígitos MX antes de enviar. */
+const normPhone = p => String(p || '').replace(/\D/g, '').replace(/^52(?=\d{10}$)/, '').slice(-10);
+/** Canal del toque → ícono + estilo */
+const CH = { 'Llamada':['phone','call'], 'Vambe / WhatsApp':['chat','wa'], 'Correo':['mail','mail'], 'Presencial':['user','person'], 'Twilio':['chat','wa'], 'Administrativo':['flag','admin'] };
+const chIco = ch => { const [n, c] = CH[ch] || ['flag','admin']; return `<span class="ch-ico ${c}">${icon(n)}</span>`; };
+
+/* ============================================================================
+   C. ESTADO + DATOS SIMULADOS (FICTICIOS)
+   ============================================================================ */
+const state = {
+  role: 'BDC',
+  view: 'home',
+  leadId: null,
+  leadTab: 'accion',        // pestaña activa de la ficha 360
+  captureScope: 'stage',    // 'stage' o key de transversal en la pestaña Captura
+  showAllFields: false,     // false = solo campos de mi rol
+  q: '',
+  filters: { stage:'', brand:'', source:'', temp:'' },
+  fieldFilter: { role:'', mod:'', q:'' },
+  journeyFilter: { stage:'', channel:'', src:'' },
+  leads: [],
+};
+
+/** Crea un lead simulado con la misma forma que devuelve el middleware + capa CRM. */
+function mkLead(o) {
+  const brand = o.brand, model = o.model || BRANDS[brand][0];
+  const lead = {
+    id: uuid(),                                   // = lead_id del middleware (correlación Dynamics/Creatio)
+    unique_contact_id: o.ucid || uuid(),
+    first: o.first, last: o.last,
+    email: o.email ?? `${o.first.toLowerCase()}.${o.last.toLowerCase().split(' ')[0]}@example.com`.normalize('NFD').replace(/[̀-ͯ]/g,''),
+    phone: o.phone ?? ('5500' + String(100000 + Math.floor(Math.random()*899999))),
+    brand, model, year: o.year || '2026', version: o.version || '',
+    source: o.source || 'web_form', form_name: o.form || 'VDP - ME INTERESA',
+    agency: AGENCIES[brand], utm_source: o.utm || 'google', utm_medium: 'cpc', utm_campaign: o.campaign || `${brand.toLowerCase()}-nov26`,
+    stage: o.stage ?? 0, created: NOW - (o.mins ?? 30) * 60000,
+    day: o.day ?? 1, cadenceIdx: o.cad ?? 0, cadenceOutcome: o.cadOut || null,
+    bdc: o.bdc || BDC_AGENTS[Math.floor(Math.random()*3)], asesor: o.asesor || '',
+    temp: o.temp || 'Tibio', category: o.cat || 'Cita',
+    tv: Object.assign({ apartado:'', prueba:'', fin:'', cuenta:'', exp:'', log:'' }, o.tv || {}),
+    done: new Set(o.done || []),                  // llaves de toques realizados
+    fields: {}, docs: new Set(o.docs || []),
+    appt: o.appt || null,                         // {code, at, status, kind}
+    activity: [], dispatches: [], relays: [],
+  };
+  lead.intent = FORM_INTENT[lead.form_name] || 'inquiry';
+  // Prellenado de campos del journey con lo que ya trae el lead del middleware
+  Object.assign(lead.fields, {
+    F001: lead.first, F002: lead.last, F003: lead.email, F004: lead.phone, F011: brand, F012: model, F013: lead.year, F014: lead.version,
+    F016: lead.bdc, F017: lead.asesor, F021: lead.temp, F065: lead.source, F066: lead.category,
+    F111: fmtDate(lead.created), F112: fmtDate(lead.created + 60000), F113: lead.source.includes('lead_ad') ? 'Redes sociales' : 'Digital',
+    F114: lead.source, F115: lead.utm_source, F116: `www.${brand.toLowerCase()}-autocom.example`, F117: lead.form_name, F118: lead.agency,
+  }, o.fields || {});
+  // Despachos del middleware (DispatchLeadJob): dynamics + vambe, excluyendo el CRM de origen
+  ['dynamics','vambe'].filter(c => c !== lead.source).forEach(crm => lead.dispatches.push({
+    crm, status: o.dispFail === crm ? 'failed' : 'success', attempts: o.dispFail === crm ? 3 : 1,
+    external_id: o.dispFail === crm ? null : (crm === 'dynamics' ? uuid() : 'vb_' + Math.random().toString(36).slice(2, 10)),
+    dispatched_at: o.dispFail === crm ? null : lead.created + 40000, last_error: o.dispFail === crm ? 'timeout' : null,
+  }));
+  lead.activity.push({ ts: lead.created, who: 'Middleware', txt: `Lead recibido vía <b>${esc(lead.source)}</b> · formulario “${esc(lead.form_name)}” → intent <b>${lead.intent}</b>` });
+  return lead;
+}
+
+/** Siembra de leads ficticios distribuidos en todas las etapas del journey. */
+function seed() {
+  const today = h => { const d = new Date(); d.setHours(h, 0, 0, 0); return d.getTime(); };
+  const add = o => state.leads.push(mkLead(o));
+  add({ first:'Valeria', last:'Montes', brand:'KIA', model:'Seltos', source:'facebook_lead_ad', mins:4, temp:'Caliente', utm:'facebook' });
+  add({ first:'Rodrigo', last:'Aguilar', brand:'NISSAN', model:'Kicks', source:'web_form', mins:13, form:'VDP - AGENDA VISITA' });
+  add({ first:'Fernanda', last:'Castro', brand:'BYD', model:'Dolphin', source:'google_lead_form', mins:2 });
+  add({ first:'Héctor', last:'Navarro', brand:'HYUNDAI', model:'Tucson', source:'seekop', stage:1, day:2, cad:2, mins:60*26, done:[] });
+  add({ first:'Daniela', last:'Ibarra', brand:'HONDA', model:'HR-V', source:'web_form', stage:1, day:4, cad:6, mins:60*24*3, temp:'Frío', dispFail:'vambe' });
+  add({ first:'Mauricio', last:'Lozano', brand:'GWM', model:'Haval H6', source:'tiktok_lead_ad', stage:1, day:7, cad:10, mins:60*24*6, temp:'Frío' });
+  add({ first:'Andrea', last:'Salgado', brand:'CHANGAN', model:'CS55 Plus', source:'whatsapp', stage:1, day:1, cad:0, mins:60*3, cadOut:'contactado', temp:'Caliente' });
+  add({ first:'Ernesto', last:'Pineda', brand:'KIA', model:'Sportage', source:'web_form', stage:2, mins:60*30, temp:'Caliente', appt:{ code:'CITA-7Q4K', at:today(12), status:'scheduled', kind:'Visita' } });
+  add({ first:'Lucía', last:'Ferrer', brand:'TOYOTA', model:'RAV4', source:'mi_autocom', stage:2, mins:60*50, appt:{ code:'CITA-2M8D', at:today(16), status:'scheduled', kind:'Visita' } });
+  add({ first:'Tomás', last:'Rivas', brand:'NISSAN', model:'X-Trail', source:'dealer_on', stage:2, mins:60*72, temp:'Frío', appt:{ code:'CITA-9X1B', at:today(10) - 86400000, status:'no_show', kind:'Visita' } });
+  add({ first:'Paulina', last:'Ortiz', brand:'HONDA', model:'CR-V', source:'web_form', stage:3, mins:60*80, cat:'Cita', appt:{ code:'CITA-5H3P', at:today(9), status:'checked_in', kind:'Visita' } });
+  add({ first:'Gerardo', last:'Vidal', brand:'ACURA', model:'RDX', source:'at_plus_piso', form:'PISO - WALK IN', stage:4, mins:60*5, asesor:'Jorge Salinas', cat:'Fresh Up', tv:{ prueba:'on' }, temp:'Caliente' });
+  add({ first:'Mónica', last:'Herrera', brand:'KIA', model:'K3', source:'facebook_lead_ad', stage:4, mins:60*96, asesor:'Jorge Salinas', cat:'Be Back', tv:{ prueba:'ok', cuenta:'on' } });
+  add({ first:'Saúl', last:'Becerra', brand:'HYUNDAI', model:'Creta', source:'google_lead_form', stage:5, mins:60*120, asesor:'Mariana Vega', tv:{ prueba:'ok', fin:'on', apartado:'ok', exp:'on' }, docs:['F159','F160','F163'], temp:'Caliente' });
+  add({ first:'Regina', last:'Cordero', brand:'BYD', model:'Seal', source:'web_form', form:'VDP - LATINID CREDIT', stage:5, mins:60*140, asesor:'Jorge Salinas', tv:{ fin:'on', exp:'on' } });
+  add({ first:'Iván', last:'Mendoza', brand:'NISSAN', model:'Sentra', source:'mercadolibre', stage:6, mins:60*200, asesor:'Diego Paredes', tv:{ prueba:'ok', fin:'ok', apartado:'ok', exp:'on' }, docs:['F159','F160','F161','F162','F163','F167'] });
+  add({ first:'Carolina', last:'Esquivel', brand:'TOYOTA', model:'Corolla', source:'salesforce_toyota', stage:7, mins:60*300, asesor:'Sofía Lara', tv:{ prueba:'ok', apartado:'ok', exp:'on', log:'on' } });
+  add({ first:'Alberto', last:'Quiroz', brand:'GWM', model:'Poer', source:'web_form', form:'FLOTILLAS', stage:8, mins:60*400, asesor:'Mariana Vega', tv:{ prueba:'ok', fin:'ok', exp:'on', log:'ok' }, appt:{ code:'ENT-4R2Z', at:today(17), status:'scheduled', kind:'Entrega' } });
+  // Un mismo contacto con 2 leads → muestra la deduplicación por unique_contact_id
+  const dup = state.leads.find(l => l.first === 'Valeria');
+  const second = mkLead({ first:'Valeria', last:'Montes', brand:'KIA', model:'Sonet', source:'web_form', mins:60*24*40, stage:1, day:35, cad:18, ucid: dup.unique_contact_id, phone: dup.phone, email: dup.email, temp:'Frío' });
+  second.status = 'descartado'; second.activity.push({ ts: NOW - 86400000*5, who:'Sistema', txt:'Ciclo de 35 días sin respuesta → <b>Descartado</b> (L19)' });
+  state.leads.push(second);
+  // Marca como hechos los toques previos de cadencia según cadIdx
+  state.leads.forEach(l => { CADENCE.slice(0, l.cadenceIdx).forEach(c => c.touch && l.done.add(c.touch.key)); });
+}
+
+/* ============================================================================
+   D. MOTOR DEL JOURNEY — siguiente mejor acción por lead
+   ============================================================================ */
+/** Toques que aplican a una etapa (excluye reglas Creatio, que se muestran como automatizaciones). */
+function stageTouches(stage) {
+  return DATA.touches.filter(t => stage.touchStages.includes(t.stage) && t.src !== 'Creatio actual');
+}
+function tvTouches(tv) { return DATA.touches.filter(t => tv.touchStages.includes(t.stage)); }
+
+/** Calcula la siguiente acción del lead según su etapa:
+ *  - Nuevo/En Contacto sin contacto efectivo → cadencia L1…L19 (35 días)
+ *  - Contacto efectivo → L20 (diferenciadores) y agendar cita
+ *  - Resto de etapas → primer toque pendiente de la etapa (Touch Points Piso)
+ *  Devuelve {touch, owner, due:'vencido'|'hoy'|'próximo', label} o null. */
+function nextAction(l) {
+  if (l.status === 'descartado') return null;
+  const st = STAGES[l.stage];
+  if (l.stage <= 1 && l.cadenceOutcome !== 'contactado') {
+    const c = CADENCE[l.cadenceIdx];
+    if (!c) return null;
+    const owner = ['L11','L13'].includes(c.id) ? 'Gerencia' : 'BDC';    // escalamientos gerenciales Día 7 y 10
+    const due = c.day < l.day ? 'vencido' : c.day === l.day ? 'hoy' : 'próximo';
+    return { touch: c.touch, owner, due, label: `Día ${c.day} de 35` };
+  }
+  if (l.stage <= 1 && l.cadenceOutcome === 'contactado') {
+    const l20 = DATA.touches.find(t => t.id === 'L20');
+    if (!l.done.has(l20.key)) return { touch: l20, owner:'BDC', due:'hoy', label:'Contacto efectivo' };
+    return { touch: null, owner:'BDC', due:'hoy', label:'Agendar cita', custom:'agendar' };
+  }
+  if (st.key === 'cita' && l.appt && l.appt.status === 'no_show') {
+    const ns = DATA.touches.filter(t => t.id.startsWith('NS')).find(t => !l.done.has(t.key));
+    if (ns) return { touch: ns, owner:'BDC', due:'vencido', label:'No show' };
+  }
+  if (st.key === 'cita') {
+    const t = stageTouches(st).filter(t => !t.id.startsWith('NS') && t.id !== 'P1').find(t => !l.done.has(t.key));
+    if (t) return { touch: t, owner:'BDC', due: 'hoy', label: 'Confirmación de cita' };
+    return { touch: null, owner:'Hostess', due:'hoy', label:'Esperando llegada', custom:'checkin' };
+  }
+  if (st.key === 'atendido') {
+    // En "Atendido" el journey propone prueba de manejo como siguiente paso natural
+    const t = tvTouches(TRANSVERSALS[1]).find(t => !l.done.has(t.key));
+    if (t) return { touch: t, owner:'APV', due:'hoy', label:'Prueba de manejo (transversal)' };
+    return { touch: null, owner:'APV', due:'hoy', label:'Generar cotización', custom:'avanzar' };
+  }
+  const t = stageTouches(st).find(t => !l.done.has(t.key));
+  if (t) return { touch: t, owner: st.owner, due: 'hoy', label: st.name };
+  return { touch: null, owner: st.owner, due:'próximo', label:'Etapa completa', custom:'avanzar' };
+}
+
+/** ¿Este rol trabaja esta acción? Gerencia ve todo. */
+const roleOwns = (owner, role) => role === 'Gerencia' || owner === role || (role === 'APV' && owner === 'F&I');
+
+/** Campos de una etapa (columna de matriz) o de un módulo transversal. */
+function fieldsFor(scope) {
+  if (scope.mod) return DATA.fields.filter(f => f.m === scope.mod);
+  return DATA.fields.filter(f => f.s[scope.col]);
+}
+/** Roles de un campo en un alcance (si es módulo transversal sin etapa → todos). */
+function fieldRoles(f, scope) {
+  if (scope.mod) { const all = Object.values(f.s).flat(); return all.length ? [...new Set(all)] : ['Sin etapa']; }
+  return f.s[scope.col] || [];
+}
+const canEdit = (roles, role) => role === 'Gerencia' || roles.some(r => r === role || (role === 'APV' && r === 'F&I') || r === 'Sin etapa');
+
+/** % de captura de la etapa actual para el rol activo. */
+function completion(l, scope = { col: STAGES[l.stage].col }) {
+  const fs = fieldsFor(scope).filter(f => canEdit(fieldRoles(f, scope).filter(r => !r.includes('lectura')), state.role) && !/^F1(1[1-8])$/.test(f.id));
+  if (!fs.length) return { pct: null, done: 0, total: 0 };   // null = no aplica a este rol
+  const done = fs.filter(f => l.fields[f.id] !== undefined && l.fields[f.id] !== '' && l.fields[f.id] !== false).length;
+  return { pct: Math.round(done / fs.length * 100), done, total: fs.length };
+}
+
+/* ============================================================================
+   E. SIMULADOR DEL MIDDLEWARE (lead-capture-middleware) — sin red real
+   ----------------------------------------------------------------------------
+   Reproduce el comportamiento documentado en leads-api.md:
+   - POST /webhooks/at_plus (propuesta opción B) → 201 {status:"ok", lead_id}
+     o 200 {status:"ignored"} si no hay email ni teléfono
+   - DispatchLeadJob asíncrono → crm_dispatches pending → success/failed
+   - POST /api/v1/vambe_messages → 202 + relay (queued → sent)
+   - POST /api/v1/appointments → confirmation_code; POST …/check_in
+   - POST /api/v1/cotizations/external → precio REFERENCIAL de toma
+   ============================================================================ */
+const MW = {
+  /** Construye el payload que AT+ enviaría al middleware (alias preferidos del contrato). */
+  payload(f) {
+    return {
+      source: f.source, source_id: f.external_id, form_name: f.form_name,
+      name: f.first, last_name: f.last, email: f.email || undefined, phone: normPhone(f.phone) || undefined,
+      make: f.brand, model: f.model, year: f.year, version: f.version || undefined,
+      agency: AGENCIES[f.brand], domain: 'at-plus.autocom.example',
+      utm_source: f.utm_source || undefined, customer_need: f.need || undefined,
+    };
+  },
+  /** Crea el lead. Regla de negocio: sin phone ni email → "ignored" (se trata como error). */
+  createLead(f) {
+    const p = this.payload(f);
+    if (!p.phone && !p.email) return { http: 200, body: { status: 'ignored' } };
+    // Dedupe: UniqueContactFinder (match exacto por email O teléfono)
+    const match = state.leads.find(l => (p.email && l.email === p.email) || (p.phone && l.phone === p.phone));
+    const lead = mkLead({ first: f.first, last: f.last, email: p.email || '', phone: p.phone || '', brand: f.brand, model: f.model, year: f.year, version: f.version, source: f.source, form: f.form_name, mins: 0, ucid: match?.unique_contact_id, temp: 'Tibio', stage: f.stage ?? 0, asesor: f.asesor, cat: f.category, bdc: f.source === 'at_plus_piso' ? '—' : undefined });
+    lead.dispatches.forEach(d => Object.assign(d, { status: 'pending', external_id: null, dispatched_at: null, attempts: 0 }));
+    lead.raw_payload = p;
+    state.leads.unshift(lead);
+    this.dispatch(lead);
+    return { http: 201, body: { status: 'ok', lead_id: lead.id }, lead, match };
+  },
+  /** DispatchLeadJob: resuelve cada CRM de forma asíncrona (simulado 1.5–3 s). */
+  dispatch(lead, only) {
+    lead.dispatches.filter(d => !only || d.crm === only).forEach((d, i) => {
+      d.status = 'pending';
+      setTimeout(() => {
+        d.status = 'success'; d.attempts++; d.last_error = null; d.dispatched_at = Date.now();
+        d.external_id = d.crm === 'dynamics' ? uuid() : 'vb_' + Math.random().toString(36).slice(2, 10);
+        lead.activity.unshift({ ts: Date.now(), who: 'Middleware', txt: `crm_dispatch <b>${d.crm}</b> → success (${d.external_id.slice(0, 13)}…)` });
+        rerenderIf(lead);
+      }, 1500 + i * 1200);
+    });
+  },
+  /** Vambe: 202 Accepted + relay; el estado se conoce después (polling). */
+  sendVambe(lead, touch) {
+    const relay = { id: uuid(), template: touch ? `${touch.id} · ${touch.t}` : 'Mensaje libre', status: 'queued', at: Date.now() };
+    lead.relays.unshift(relay);
+    setTimeout(() => { relay.status = 'sent'; rerenderIf(lead); }, 1800);
+    return { http: 202, relay };
+  },
+  /** Citas: devuelve confirmation_code para check-in en recepción. */
+  createAppointment(lead, at, kind) {
+    const code = (kind === 'Entrega' ? 'ENT-' : 'CITA-') + Math.random().toString(36).slice(2, 6).toUpperCase();
+    lead.appt = { code, at, status: 'scheduled', kind };
+    return { http: 201, confirmation_code: code };
+  },
+  checkIn(lead, by) { lead.appt.status = 'checked_in'; lead.appt.checked_in_by = by; return { http: 200 }; },
+  /** Cotización de toma (auto a cuenta): SIEMPRE referencial. */
+  quoteTradeIn(f) {
+    const base = { '2024': 360000, '2023': 320000, '2022': 285000, '2021': 250000, '2020': 220000 }[f.year] || 180000;
+    const km = Number(f.km || 0);
+    return { http: 201, min: Math.round((base - km * 0.6) * 0.88 / 1000) * 1000, max: Math.round((base - km * 0.6) / 1000) * 1000 };
+  },
+};
+function rerenderIf(lead) { if (state.view === 'lead' && state.leadId === lead.id) render(); else if (['integraciones','leads','home'].includes(state.view)) render(); }
+
+/* ============================================================================
+   F. RENDER GENERAL (nav, topbar, router)
+   ============================================================================ */
+const NAV = [
+  { group:'Operación' },
+  { key:'home',       name:'Mi día',        ico:'home',   count: () => queue().length },
+  { key:'leads',      name:'Leads',         ico:'users',  count: () => state.leads.filter(l => l.status !== 'descartado').length },
+  { key:'pipeline',   name:'Pipeline',      ico:'kanban' },
+  { key:'recepcion',  name:'Recepción',     ico:'door',   count: () => state.leads.filter(l => l.appt && l.appt.status === 'scheduled' && isToday(l.appt.at)).length },
+  { key:'agenda',     name:'Agenda',        ico:'cal' },
+  { group:'Configuración' },
+  { key:'journey',    name:'Journey y cadencias', ico:'route' },
+  { key:'campos',     name:'Diccionario de campos', ico:'list' },
+  { key:'integraciones', name:'Integraciones',  ico:'plug', count: () => state.leads.flatMap(l => l.dispatches).filter(d => d.status === 'failed').length || '' },
+];
+const isToday = ts => new Date(ts).toDateString() === new Date().toDateString();
+
+function renderChrome() {
+  $('#nav').innerHTML = NAV.map(n => n.group ? `<div class="nav-label">${n.group}</div>` :
+    `<button class="${state.view === n.key || (n.key === 'leads' && state.view === 'lead') ? 'active' : ''}" data-action="go" data-view="${n.key}">${icon(n.ico)}<span>${n.name}</span>${n.count && n.count() !== '' ? `<span class="count">${n.count()}</span>` : ''}</button>`).join('');
+  $('#roles').innerHTML = ROLES.map(r => `<button class="${state.role === r.key ? 'active' : ''}" data-action="role" data-role="${r.key}">${r.key}</button>`).join('');
+  const me = ROLES.find(r => r.key === state.role);
+  $('#me').innerHTML = `<div class="avatar">${me.user.split(' ').map(s => s[0]).join('')}</div><span>${me.user}<br><small class="muted">${me.key}</small></span>`;
+}
+
+function render() {
+  renderChrome();
+  const v = { home: viewHome, leads: viewLeads, pipeline: viewPipeline, lead: viewLead, recepcion: viewRecepcion, agenda: viewAgenda, journey: viewJourney, campos: viewCampos, integraciones: viewIntegraciones }[state.view];
+  $('#view').innerHTML = v();
+}
+
+/* ============================================================================
+   G. VISTA: MI DÍA — cola de trabajo priorizada por rol
+   ============================================================================ */
+/** Cola: leads cuya siguiente acción le toca al rol activo, ordenada por urgencia y SLA. */
+function queue() {
+  const rank = { vencido: 0, hoy: 1, 'próximo': 2 };
+  return state.leads.map(l => ({ l, a: nextAction(l) }))
+    .filter(x => x.a && roleOwns(x.a.owner, state.role))
+    .filter(x => state.role !== 'APV' || !x.l.asesor || x.l.asesor === ROLES.find(r => r.key === 'APV').user || x.l.stage < 4)
+    .sort((x, y) => rank[x.a.due] - rank[y.a.due] || x.l.created - y.l.created);
+}
+
+function slaChip(l) {
+  // SLA del journey: primer contacto dentro de los primeros 10 minutos (L1 / F069)
+  if (l.stage !== 0 || l.cadenceIdx > 0) return '';
+  const m = Math.floor((Date.now() - l.created) / 60000);
+  const left = 10 - m;
+  return left > 0 ? `<span class="chip warn">${icon('clock','sm')}<span class="sla">${left} min</span> para SLA</span>` : `<span class="chip err">${icon('alert','sm')}SLA vencido +${-left} min</span>`;
+}
+
+function viewHome() {
+  const q = queue();
+  const L = state.leads.filter(l => l.status !== 'descartado');
+  const nuevos = L.filter(l => l.stage === 0).length;
+  const sla = L.filter(l => l.stage === 0 && (Date.now() - l.created) / 60000 > 10).length;
+  const citasHoy = L.filter(l => l.appt && isToday(l.appt.at) && l.appt.kind !== 'Entrega').length;
+  const noShow = L.filter(l => l.appt && l.appt.status === 'no_show').length;
+  const failed = L.flatMap(l => l.dispatches).filter(d => d.status === 'failed').length;
+  const vencidas = q.filter(x => x.a.due === 'vencido').length;
+  const me = ROLES.find(r => r.key === state.role);
+  const hint = {
+    BDC: 'Tu cola sigue el Contact Plan CDK: primer contacto en 10 min, 2 llamadas dobles + plantilla Vambe por día, escalamiento día 7 y 10, descarte día 35.',
+    Hostess: 'Tus pendientes son llegadas: check-in de citas, registro de walk-ins y asignación de asesor.',
+    APV: 'Tu cola es lo que ya está en piso: detección de necesidades, prueba de manejo, apartado, cotización y pedido.',
+    'F&I': 'Tus pendientes son facturación, expediente digital y entrega.',
+    Gerencia: 'Ves la cola completa del equipo y los escalamientos gerenciales (día 7 y 10).',
+  }[state.role];
+  return `
+  <div class="page-head"><div><h1>Buen día, ${me.user.split(' ')[0]}</h1><p class="muted">${hint}</p></div>
+    <div class="filters"><span class="chip dark">${q.length} acciones</span>${vencidas ? `<span class="chip err">${vencidas} vencidas</span>` : ''}</div></div>
+  <div class="kpis">
+    <div class="card kpi"><b>${nuevos}</b><span>Leads nuevos sin contacto</span></div>
+    <div class="card kpi ${sla ? 'alertk' : ''}"><b>${sla}</b><span>Fuera de SLA 10 min</span></div>
+    <div class="card kpi"><b>${citasHoy}</b><span>Citas hoy</span></div>
+    <div class="card kpi ${noShow ? 'alertk' : ''}"><b>${noShow}</b><span>No show por recuperar</span></div>
+    <div class="card kpi ${failed ? 'alertk' : ''}"><b>${failed}</b><span>Envíos a CRM de marca fallidos</span></div>
+  </div>
+  <div class="grid-2">
+    <section class="card">
+      <div class="card-h"><h2>Cola de trabajo</h2><span class="small muted">Ordenada por urgencia → antigüedad</span></div>
+      ${q.length ? q.map(({ l, a }) => `
+        <div class="task" data-action="open" data-id="${l.id}">
+          ${a.touch ? chIco(a.touch.channel) : chIco(a.custom === 'checkin' ? 'Presencial' : 'Administrativo')}
+          <div style="min-width:0">
+            <div class="task-t">${esc(fullName(l))} · <span class="muted" style="font-weight:500">${esc(l.brand)} ${esc(l.model)}</span></div>
+            <div class="task-m small">
+              ${a.touch ? `<b>${esc(a.touch.id)}</b> ${esc(a.touch.t)}` : `<b>${esc(a.label)}</b>`}
+              <span class="chip ${a.due === 'vencido' ? 'err' : a.due === 'hoy' ? 'red' : ''}">${a.due}</span>
+              <span class="chip">${esc(STAGES[l.stage].name)}</span>${slaChip(l)}
+            </div>
+          </div>
+          ${icon('arrow')}
+        </div>`).join('') : `<div class="empty">Sin pendientes para ${state.role}. 🎉</div>`}
+    </section>
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <section class="card"><div class="card-h"><h3>Embudo del journey</h3></div><div class="card-b" style="display:flex;flex-direction:column;gap:10px">
+        ${STAGES.map((s, i) => { const n = L.filter(l => l.stage === i).length; return `<div><div style="display:flex;justify-content:space-between" class="small"><span>${s.name}</span><b>${n}</b></div><div class="progress"><span style="width:${Math.max(4, n / L.length * 100 * 2.5)}%"></span></div></div>`; }).join('')}
+      </div></section>
+      <section class="card"><div class="card-h"><h3>Automatizaciones activas (Creatio actual)</h3></div><div class="card-b" style="display:flex;flex-direction:column;gap:8px">
+        ${DATA.touches.filter(t => t.src === 'Creatio actual').slice(0, 5).map(t => `<div class="small" style="display:flex;gap:8px;align-items:flex-start"><span class="chip info">${esc(t.id)}</span><span><b>${esc(t.brand)}</b> · ${esc(t.t)}</span></div>`).join('')}
+        <button class="btn ghost sm" data-action="go" data-view="journey">Ver las 11 reglas</button>
+      </div></section>
+    </div>
+  </div>`;
+}
+
+/* ============================================================================
+   H. VISTA: LEADS (tabla filtrable)
+   ============================================================================ */
+function filteredLeads() {
+  const f = state.filters, q = state.q.toLowerCase();
+  return state.leads.filter(l =>
+    (!f.stage || String(l.stage) === f.stage) && (!f.brand || l.brand === f.brand) && (!f.source || l.source === f.source) && (!f.temp || l.temp === f.temp) &&
+    (!q || [fullName(l), l.phone, l.email, l.model, l.appt?.code, l.id].join(' ').toLowerCase().includes(q)));
+}
+const sel = (name, opts, val, label) => `<select class="input" data-filter="${name}"><option value="">${label}</option>${opts.map(([v, t]) => `<option value="${esc(v)}" ${String(val) === String(v) ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
+const dispDots = l => `<span style="display:inline-flex;gap:6px;align-items:center">${l.dispatches.map(d => `<span title="${d.crm}: ${d.status}" style="display:inline-flex;gap:3px;align-items:center" class="small"><i class="dot ${d.status}"></i>${d.crm.slice(0, 3)}</span>`).join('')}</span>`;
+
+function viewLeads() {
+  const rows = filteredLeads();
+  return `
+  <div class="page-head"><div><h1>Leads</h1><p class="muted">Un registro por solicitud; los leads de una misma persona se agrupan por <span class="mono">unique_contact_id</span>.</p></div>
+    <div class="filters">
+      ${sel('stage', STAGES.map((s, i) => [i, s.name]), state.filters.stage, 'Todas las etapas')}
+      ${sel('brand', Object.keys(BRANDS).map(b => [b, b]), state.filters.brand, 'Todas las marcas')}
+      ${sel('source', [...new Set(state.leads.map(l => l.source))].map(s => [s, s]), state.filters.source, 'Todas las fuentes')}
+      ${sel('temp', ['Caliente','Tibio','Frío'].map(t => [t, t]), state.filters.temp, 'Temperatura')}
+    </div></div>
+  <section class="card table-wrap"><table class="t">
+    <thead><tr><th>Cliente</th><th>Vehículo de interés</th><th>Fuente</th><th>Etapa</th><th>Siguiente acción</th><th>Asesor</th><th>Temp.</th><th>CRMs de marca</th><th>Creado</th></tr></thead>
+    <tbody>${rows.map(l => { const a = nextAction(l); return `
+      <tr class="click" data-action="open" data-id="${l.id}">
+        <td><div class="who"><div class="avatar">${initials(l)}</div><div><b>${esc(fullName(l))}</b><span class="small muted">${esc(l.phone)}</span></div></div></td>
+        <td>${esc(l.brand)} ${esc(l.model)} <span class="muted">${esc(l.year)}</span><br><span class="small muted">${esc(l.agency)}</span></td>
+        <td><span class="chip">${esc(l.source)}</span></td>
+        <td>${l.status === 'descartado' ? '<span class="chip err">Descartado</span>' : `<span class="chip dark">${esc(STAGES[l.stage].name)}</span>`}</td>
+        <td class="small">${a ? (a.touch ? `<b>${esc(a.touch.id)}</b> ${esc(a.touch.t.slice(0, 38))}${a.touch.t.length > 38 ? '…' : ''}` : esc(a.label)) : '—'} ${slaChip(l)}</td>
+        <td class="small">${esc(l.asesor || l.bdc)}<br><span class="muted">${l.asesor ? 'Piso' : 'BDC'}</span></td>
+        <td><span class="temp ${l.temp}">${icon('flame','sm')}${l.temp}</span></td>
+        <td>${dispDots(l)}</td>
+        <td class="small muted">${fmtAgo(l.created)}</td>
+      </tr>`; }).join('')}</tbody></table>
+    ${rows.length ? '' : '<div class="empty">Sin resultados con estos filtros.</div>'}
+  </section>`;
+}
+
+/* ============================================================================
+   I. VISTA: PIPELINE (kanban por etapa, drag & drop)
+   ============================================================================ */
+function viewPipeline() {
+  const L = filteredLeads().filter(l => l.status !== 'descartado');
+  return `
+  <div class="page-head"><div><h1>Pipeline del journey</h1><p class="muted">Arrastra una tarjeta para cambiar de etapa. Las etiquetas moradas son transversales activas.</p></div>
+    <div class="filters">${sel('brand', Object.keys(BRANDS).map(b => [b, b]), state.filters.brand, 'Todas las marcas')}</div></div>
+  <div class="board">${STAGES.map((s, i) => { const items = L.filter(l => l.stage === i); return `
+    <div class="col" data-drop="${i}">
+      <div class="col-h"><span>${s.name}<span class="obj">${s.obj} · ${s.owner}</span></span><span class="chip">${items.length}</span></div>
+      <div class="col-b">${items.map(l => { const a = nextAction(l); return `
+        <div class="lcard" draggable="true" data-drag="${l.id}" data-action="open" data-id="${l.id}">
+          <div class="row"><b>${esc(fullName(l))}</b><span class="temp ${l.temp}">${icon('flame','sm')}</span></div>
+          <div class="small muted">${esc(l.brand)} ${esc(l.model)} · ${esc(l.source)}</div>
+          ${a ? `<div class="small">${a.touch ? `<b>${esc(a.touch.id)}</b> ${esc(a.touch.t.slice(0, 34))}…` : esc(a.label)}</div>` : ''}
+          <div style="display:flex;gap:4px;flex-wrap:wrap">${TRANSVERSALS.filter(t => l.tv[t.key]).map(t => `<span class="chip ${l.tv[t.key] === 'ok' ? 'ok' : 'tv'}">${t.name}</span>`).join('')}${slaChip(l)}</div>
+        </div>`; }).join('')}</div>
+    </div>`; }).join('')}</div>`;
+}
+
+/* ============================================================================
+   J. VISTA: FICHA 360 DEL LEAD
+   ============================================================================ */
+function viewLead() {
+  const l = state.leads.find(x => x.id === state.leadId);
+  if (!l) return '<div class="empty">Lead no encontrado</div>';
+  const st = STAGES[l.stage], comp = completion(l);
+  const siblings = state.leads.filter(x => x.unique_contact_id === l.unique_contact_id && x.id !== l.id);
+  const tabs = [
+    ['accion', 'Siguiente acción'], ['captura', `Captura <span class="badge">${comp.pct === null ? '—' : comp.pct + '%'}</span>`], ['cadencia', 'Toques del journey'],
+    ['expediente', `Expediente <span class="badge">${l.docs.size}/41</span>`], ['actividad', 'Actividad'], ['integraciones', 'Integraciones'],
+  ];
+  return `
+  <div><button class="btn ghost sm" data-action="go" data-view="leads">${icon('back','sm')}Leads</button></div>
+  <section class="card">
+    <div class="lead-head">
+      <div class="avatar big">${initials(l)}</div>
+      <div><h1>${esc(fullName(l))} ${l.status === 'descartado' ? '<span class="chip err">Descartado</span>' : ''}</h1>
+        <div class="small muted" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:2px">
+          <span>${icon('car','sm')} ${esc(l.brand)} ${esc(l.model)} ${esc(l.year)}</span><span>· ${esc(l.agency)}</span><span>· Fuente <b>${esc(l.source)}</b></span><span>· Intent <b>${l.intent}</b></span>
+          <span class="temp ${l.temp}">· ${icon('flame','sm')}${l.temp}</span></div></div>
+      <div class="acts">
+        <button class="btn ghost" data-action="log-call" data-id="${l.id}">${icon('phone')}Llamar</button>
+        <button class="btn ghost" data-action="wa-free" data-id="${l.id}">${icon('chat')}WhatsApp</button>
+        <button class="btn secondary" data-action="appt" data-id="${l.id}">${icon('cal')}Agendar cita</button>
+        ${l.stage < STAGES.length - 1 && l.status !== 'descartado' ? `<button class="btn" data-action="advance" data-id="${l.id}">Avanzar a ${STAGES[l.stage + 1].name}${icon('arrow')}</button>` : ''}
+      </div>
+    </div>
+    <div class="stepper">${STAGES.map((s, i) => `<div class="step ${i < l.stage ? 'done' : i === l.stage ? 'cur' : ''}" data-action="jump" data-id="${l.id}" data-stage="${i}" title="Mover a ${s.name}"><i></i>${s.name}<small>${s.obj}</small></div>`).join('')}</div>
+    <div class="tv-row"><span class="small muted" style="font-weight:600">Transversales:</span>
+      ${TRANSVERSALS.map(t => `<button class="tv ${l.tv[t.key] === 'ok' ? 'ok' : l.tv[t.key] ? 'on' : ''}" data-action="tv" data-id="${l.id}" data-tv="${t.key}" title="${t.window} · clic para cambiar estado">${l.tv[t.key] === 'ok' ? icon('check','sm') : ''}${t.name}<span class="small">${l.tv[t.key] === 'ok' ? 'completo' : l.tv[t.key] ? 'en curso' : ''}</span></button>`).join('')}
+    </div>
+  </section>
+  <div class="lead-grid">
+    <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+      <div class="tabs">${tabs.map(([k, t]) => `<button class="${state.leadTab === k ? 'active' : ''}" data-action="tab" data-tab="${k}">${t}</button>`).join('')}</div>
+      ${{ accion: tabAccion, captura: tabCaptura, cadencia: tabCadencia, expediente: tabExpediente, actividad: tabActividad, integraciones: tabIntegraciones }[state.leadTab](l)}
+    </div>
+    <aside style="display:flex;flex-direction:column;gap:16px">
+      <section class="card"><div class="card-h"><h3>Resumen</h3><span class="chip dark">${esc(st.obj)}</span></div><div class="card-b">
+        <dl class="kv">
+          <dt>Teléfono</dt><dd>${esc(l.phone) || '—'}</dd><dt>Correo</dt><dd>${esc(l.email) || '—'}</dd>
+          <dt>Asesor BDC</dt><dd>${esc(l.bdc)}</dd><dt>Asesor piso</dt><dd>${esc(l.asesor) || '<span class="muted">Sin asignar</span>'}</dd>
+          <dt>Categoría CDK</dt><dd>${esc(l.category)}</dd>
+          <dt>Cita</dt><dd>${l.appt ? `${esc(l.appt.code)} · ${fmtDate(l.appt.at)} <span class="chip ${l.appt.status === 'no_show' ? 'err' : l.appt.status === 'checked_in' ? 'ok' : 'info'}">${{ scheduled:'Agendada', checked_in:'Llegó', no_show:'No asistió' }[l.appt.status]}</span>` : '—'}</dd>
+          <dt>Ciclo</dt><dd>${l.stage <= 1 ? `Día ${l.day} de 35` : '—'}</dd>
+        </dl></div></section>
+      <section class="card"><div class="card-h"><h3>Captura de la etapa</h3><span class="small muted">${comp.done}/${comp.total} campos de ${state.role}</span></div>
+        <div class="card-b"><div class="progress ${comp.pct === 100 ? 'ok' : ''}"><span style="width:${comp.pct || 0}%"></span></div>${comp.pct === null ? `<p class="small muted" style="margin:8px 0 0">${state.role} no captura campos en esta etapa.</p>` : ''}
+        <p class="small muted" style="margin:8px 0 0">El avance de etapa no se bloquea, pero se avisa si faltan campos (regla a validar con negocio).</p></div></section>
+      <section class="card"><div class="card-h"><h3>Mismo contacto</h3><span class="chip">${siblings.length + 1} leads</span></div><div class="card-b small">
+        ${siblings.length ? siblings.map(s => `<div style="display:flex;justify-content:space-between;padding:4px 0;cursor:pointer" data-action="open" data-id="${s.id}"><span>${esc(s.brand)} ${esc(s.model)} · ${esc(s.source)}</span><span class="muted">${s.status === 'descartado' ? 'Descartado' : STAGES[s.stage].name}</span></div>`).join('') : '<span class="muted">Sin otros leads de esta persona.</span>'}
+        <p class="muted" style="margin:8px 0 0">Agrupado por <span class="mono">unique_contact_id</span> (match exacto email o teléfono).</p></div></section>
+    </aside>
+  </div>`;
+}
+
+/** Reemplaza variables de las plantillas del journey con datos del lead. */
+function fillTemplate(txt, l) {
+  const asesor = l.asesor || l.bdc;
+  return String(txt || '')
+    .replace(/\(Primer nombre del cliente\)|\(Nombre del Cliente\)|"Nombre del Cliente"|“Nombre del Cliente”|"Nombre del cliente"|\{\{nombre\}\}|\{nombre_cliente\}|\[nombre del cliente\]|Nombre del cliente:/gi, l.first)
+    .replace(/\{\{asesor\}\}|\{nombre_asesor\}/g, asesor).replace(/\{\{agencia\}\}|\{agencia\}/g, l.agency)
+    .replace(/\(Modelo\)|\{\{modelo\}\}|\{vehiculo_interes\}|\(AUTO\)/g, `${l.brand} ${l.model}`)
+    .replace(/\{\{fecha_cita\}\}/g, l.appt ? new Date(l.appt.at).toLocaleDateString('es-MX') : '—')
+    .replace(/\{\{hora_cita\}\}|\{hora_cita\}/g, l.appt ? new Date(l.appt.at).toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' }) : '—');
+}
+
+/** Pestaña "Siguiente acción": el toque que toca hacer AHORA, con guion/plantilla y botones de resultado. */
+function tabAccion(l) {
+  const a = nextAction(l);
+  if (!a) return `<div class="alert info">${icon('flag')}<div>Este lead salió del journey activo (${l.status || 'cerrado'}). Si el cliente vuelve a escribir, se crea un nuevo lead ligado al mismo contacto.</div></div>`;
+  const t = a.touch;
+  const isCall = t && t.channel === 'Llamada', isWa = t && (t.channel === 'Vambe / WhatsApp' || t.channel === 'Twilio');
+  const msg = t && (t['Mensaje / plantilla'] || t['Guión / llamada']);
+  let actions = '';
+  if (t && t.id === 'L19') actions = `<button class="btn dark" data-action="discard" data-id="${l.id}">${icon('x')}Descartar lead (fin de ciclo)</button>`;
+  else if (isCall) actions = `
+      <button class="btn success" data-action="outcome" data-out="contactado" data-id="${l.id}">${icon('check')}Contactado</button>
+      <button class="btn ghost" data-action="outcome" data-out="no_contesta" data-id="${l.id}">${icon('phone')}No contesta</button>
+      <button class="btn ghost" data-action="outcome" data-out="equivocado" data-id="${l.id}">Número equivocado</button>`;
+  else if (isWa) actions = `<button class="btn" data-action="send-wa" data-id="${l.id}" data-touch="${t.key}">${icon('send')}Enviar por Vambe</button><button class="btn ghost" data-action="done" data-id="${l.id}" data-touch="${t.key}">Marcar como hecho</button>`;
+  else if (t) actions = `<button class="btn" data-action="done" data-id="${l.id}" data-touch="${t.key}">${icon('check')}Marcar como realizado</button>`;
+  else if (a.custom === 'agendar') actions = `<button class="btn" data-action="appt" data-id="${l.id}">${icon('cal')}Agendar cita</button>`;
+  else if (a.custom === 'checkin') actions = `<button class="btn" data-action="checkin" data-id="${l.id}">${icon('door')}Registrar llegada (check-in)</button>`;
+  else if (a.custom === 'avanzar' && l.stage < STAGES.length - 1) actions = `<button class="btn" data-action="advance" data-id="${l.id}">Avanzar a ${STAGES[l.stage + 1].name}${icon('arrow')}</button>`;
+  const relays = l.relays.slice(0, 3);
+  return `
+  <div class="nba">
+    <div class="nba-h"><span>SIGUIENTE MEJOR ACCIÓN · ${esc(a.label)} · responsable <b>${esc(a.owner)}</b></span><span class="chip ${a.due === 'vencido' ? 'err' : 'red'}">${a.due}</span></div>
+    <div class="nba-b">
+      ${t ? `<div style="display:flex;gap:12px;align-items:center">${chIco(t.channel)}<div><h2>${esc(t.id)} · ${esc(t.t)}</h2><div class="small muted">${esc(t.channel)} · ${esc(t.when)}</div></div></div>
+      ${t['Objetivo'] ? `<div class="small"><b>Objetivo:</b> ${esc(t['Objetivo'])}</div>` : ''}
+      ${msg ? `<div><div class="section-t" style="margin-bottom:6px">${t['Mensaje / plantilla'] ? 'Plantilla (variables ya reemplazadas)' : 'Guion sugerido'}</div><div class="script">${esc(fillTemplate(msg, l))}</div></div>` : ''}
+      ${t['CTA / salida'] ? `<div class="small"><b>Salida esperada:</b> ${esc(t['CTA / salida'])}</div>` : ''}`
+      : `<h2>${esc(a.label)}</h2><p class="muted" style="margin:0">${a.custom === 'agendar' ? 'Ya hubo contacto efectivo y se enviaron diferenciadores. Siguiente paso: cita presencial o videollamada hoy o mañana.' : a.custom === 'checkin' ? 'La hostess registra la llegada con el folio de cita.' : 'No hay toques pendientes en esta etapa.'}</p>`}
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${actions}</div>
+      ${slaChip(l) ? `<div>${slaChip(l)} <span class="small muted">Se registra automáticamente en F069 “Se contactó antes de 10 min”.</span></div>` : ''}
+    </div>
+  </div>
+  ${relays.length ? `<section class="card"><div class="card-h"><h3>Mensajes Vambe</h3><span class="small muted">POST /api/v1/vambe_messages → 202 + relay</span></div><div class="card-b small">
+    ${relays.map(r => `<div style="display:flex;justify-content:space-between;padding:4px 0"><span>${esc(r.template)}</span><span class="chip ${r.status === 'sent' ? 'ok' : 'warn'}">${r.status}</span></div>`).join('')}</div></section>` : ''}
+  ${l.stage === 3 ? `<section class="card"><div class="card-h"><h3>Asignar asesor de piso</h3></div><div class="card-b" style="display:flex;gap:8px;flex-wrap:wrap">
+    ${FLOOR_AGENTS.map((a, i) => `<button class="btn ${i === 0 ? 'secondary' : 'ghost'} sm" data-action="assign" data-id="${l.id}" data-asesor="${a}">${esc(a)} ${i === 0 ? '· siguiente en turno' : ''}</button>`).join('')}</div></section>` : ''}`;
+}
+
+/** Tipo de control según el nombre del campo del journey (heurística para la maqueta). */
+function control(f, l, ro) {
+  const v = l.fields[f.id] ?? '', n = f.n.toLowerCase(), dis = ro ? 'disabled' : '';
+  const data = `data-field="${f.id}" data-id="${l.id}"`;
+  const opts = { 'temperatura':['Caliente','Tibio','Frío'], 'tipo de compra':['Contado','Financiamiento','Arrendamiento','Flotilla'], 'categoria':['Cita','Be Back','Fresh Up'],
+    'mejor medio':['Llamada','WhatsApp','Correo'], 'segunda mejor':['Llamada','WhatsApp','Correo'], 'modalidad':['Agencia','A domicilio'], 'estado':['Programada','Realizada','Cancelada'],
+    'tipo de financiamiento':['Banco','Financiera de marca','Autofinanciamiento'], 'divisa':['MXN','USD'], 'carroceria':['SUV','Sedán','Hatchback','Pick-up','Minivan'], 'transmisión':['Automática','Manual'] };
+  const key = Object.keys(opts).find(k => n.startsWith(k));
+  if (key) return `<select class="input" ${data} ${dis}><option value="">Selecciona…</option>${opts[key].map(o => `<option ${v === o ? 'selected' : ''}>${o}</option>`).join('')}</select>`;
+  if (/^(¿|se |es |al saludar|envía|envío|mención|ofrecer|flotilla|pago de anticipo|enganche$)/.test(n) || n.includes('?'))
+    return `<div class="toggle" role="group">${['Sí','No'].map(o => `<button type="button" class="${v === o ? 'on' : ''}" data-action="yn" ${data} data-val="${o}" ${dis}>${o}</button>`).join('')}</div>`;
+  if (/fecha|hora/.test(n)) return `<input type="datetime-local" class="input" ${data} value="${esc(v)}" ${dis}>`;
+  if (/comentario|notas|notes/.test(n)) return `<textarea class="input" ${data} rows="2" ${dis}>${esc(v)}</textarea>`;
+  if (/precio|importe|monto|presupuesto|ingresos|pago inicial|mensualidades|descuento|kilometraje|cantidad/.test(n)) return `<input type="number" class="input" ${data} value="${esc(v)}" placeholder="0" ${dis}>`;
+  return `<input class="input" ${data} value="${esc(v)}" ${dis}>`;
+}
+
+/** Pestaña "Captura": formulario dinámico construido con la matriz campo × etapa × rol del journey. */
+function tabCaptura(l) {
+  const st = STAGES[l.stage];
+  const scopes = [{ key:'stage', name:`Etapa: ${st.name}`, col: st.col }, ...TRANSVERSALS.filter(t => t.col !== undefined || t.mod).filter(t => t.key !== 'exp')];
+  const scope = scopes.find(s => s.key === state.captureScope) || scopes[0];
+  let fs = fieldsFor(scope);
+  const all = fs.length;
+  if (!state.showAllFields) fs = fs.filter(f => canEdit(fieldRoles(f, scope), state.role) || fieldRoles(f, scope).some(r => r.startsWith(state.role)));
+  const byMod = {};
+  fs.forEach(f => (byMod[f.m] = byMod[f.m] || []).push(f));
+  const c = completion(l, scope);
+  return `
+  <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center">
+    <div class="seg">${scopes.map(s => `<button class="${s.key === scope.key ? 'on' : ''} ${s.key !== 'stage' ? 'tvb' : ''}" data-action="scope" data-scope="${s.key}">${esc(s.name)}</button>`).join('')}</div>
+    <label class="small" style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" data-action="allfields" ${state.showAllFields ? 'checked' : ''}> Ver campos de otros roles (${all})</label>
+  </div>
+  <div class="alert info">${icon('list')}<div><b>${fs.length} campos</b> para <b>${state.role}</b> en ${esc(scope.name)} · ${c.done}/${c.total} capturados. Los campos y roles salen directo de la matriz del journey (F001–F199). Los grises son de lectura u otro rol.</div></div>
+  ${scope.key === 'cuenta' ? `<div class="alert warn">${icon('alert')}<div>Cotizar la toma usa <span class="mono">POST /api/v1/cotizations/external</span>. Es un <b>precio referencial</b>: cualquier oferta final debe validarse con el equipo de Ventas, las listas de precios oficiales o el CRM. <button class="btn sm secondary" style="margin-left:8px" data-action="tradein" data-id="${l.id}">Cotizar toma</button></div></div>` : ''}
+  ${scope.key === 'stage' && st.key === 'cotizacion' ? `<div class="alert warn">${icon('alert')}<div>Precios, descuentos y condiciones de crédito son de referencia en la maqueta; se validan con Ventas / listas oficiales / CRM de AUTOCOM antes de enviar la cotización formal (P18).</div></div>` : ''}
+  ${Object.entries(byMod).map(([m, list]) => `
+    <div class="mod"><div class="mod-h" data-action="mod"><b>${esc(DATA.mods[m])}</b><span class="small muted">${list.length} campos</span></div>
+      <div class="mod-b">${list.map(f => { const roles = fieldRoles(f, scope); const ro = !canEdit(roles.filter(r => !r.includes('lectura')), state.role) || /^F1(1[1-8])$/.test(f.id); return `
+        <div class="field ${/comentario|notas/i.test(f.n) ? 'full' : ''}" style="${/comentario|notas/i.test(f.n) ? 'grid-column:1/-1' : ''}">
+          <label><span class="mono muted">${f.id}</span>${esc(f.n)} ${roles.map(r => `<span class="role ${roleCls(r)} ${r.includes('lectura') ? 'ro' : ''}">${esc(r.replace(' (lectura)', ' · lectura'))}</span>`).join('')}</label>
+          ${control(f, l, ro)}
+        </div>`; }).join('')}</div></div>`).join('') || '<div class="empty">No hay campos de este rol en este alcance. Activa “Ver campos de otros roles”.</div>'}`;
+}
+
+/** Pestaña "Toques del journey": cadencia de 35 días + toques de la etapa y transversales. */
+function tabCadencia(l) {
+  const st = STAGES[l.stage];
+  const cadDays = {}; CADENCE.forEach(c => { cadDays[c.day] = cadDays[c.day] || new Set(); cadDays[c.day].add(c.touch?.channel === 'Llamada' ? 'call' : 'wa'); });
+  const list = (touches) => touches.map(t => { const done = l.done.has(t.key); const nxt = nextAction(l)?.touch?.key === t.key; return `
+    <div class="tl ${done ? 'done' : nxt ? 'next' : ''}"><div class="b">${done ? icon('check','sm') : icon(CH[t.channel]?.[0] || 'flag','sm')}</div>
+      <div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>${esc(t.id)} · ${esc(t.t)}</b>${nxt ? '<span class="chip red">siguiente</span>' : ''}${done ? '<span class="chip ok">hecho</span>' : ''}</div>
+      <div class="small muted">${esc(t.channel)} · ${esc(t.when)}</div></div></div>`; }).join('');
+  const tvs = TRANSVERSALS.filter(t => l.tv[t.key] && tvTouches(t).length);
+  return `
+  ${l.stage <= 1 ? `<section class="card"><div class="card-h"><h3>Ciclo de no respuesta · 35 días</h3><span class="small muted">● llamada ● WhatsApp</span></div><div class="card-b">
+    <div class="cad">${Array.from({ length: 35 }, (_, i) => { const d = i + 1, s = cadDays[d]; return `<div class="${s ? 'has' : ''} ${s && s.has('call') ? 'call' : ''} ${s && s.has('wa') ? 'wa' : ''} ${d === l.day ? 'today' : ''}" title="Día ${d}">${d}</div>`; }).join('')}</div>
+    <p class="small muted" style="margin:10px 0 0">Días 1–5: 2 llamadas dobles + plantilla DISC (Concienzudo, Influyente, Estable, Dominante). Día 7 y 10: escalamiento gerencial. Días 14–35: solo plantillas. Día 35: descarte.</p>
+  </div></section>
+  <section class="card"><div class="card-h"><h3>Contact Plan CDK</h3></div><div class="card-b timeline">${list(CADENCE.map(c => c.touch).filter(Boolean))}</div></section>` : ''}
+  ${l.stage > 1 ? `<section class="card"><div class="card-h"><h3>Toques de la etapa · ${esc(st.name)}</h3></div><div class="card-b timeline">${list(stageTouches(st)) || '<span class="muted">Sin toques definidos para esta etapa.</span>'}</div></section>` : ''}
+  ${tvs.map(t => `<section class="card"><div class="card-h"><h3>Transversal · ${esc(t.name)}</h3></div><div class="card-b timeline">${list(tvTouches(t))}</div></section>`).join('')}`;
+}
+
+/** Pestaña "Expediente digital": checklist de los 41 documentos F159–F199 (Cotización → Entrega). */
+function tabExpediente(l) {
+  const docs = DATA.fields.filter(f => f.m === 'module-18');
+  const apv = docs.filter(f => !Object.values(f.s).flat().includes('F&I')), fi = docs.filter(f => Object.values(f.s).flat().includes('F&I'));
+  const block = (t, arr) => `<section class="card"><div class="card-h"><h3>${t}</h3><span class="small muted">${arr.filter(d => l.docs.has(d.id)).length}/${arr.length}</span></div><div class="card-b">
+    ${arr.map(d => `<label class="doc"><input type="checkbox" data-action="doc" data-id="${l.id}" data-doc="${d.id}" ${l.docs.has(d.id) ? 'checked' : ''}><span class="mono muted">${d.id}</span><span style="flex:1">${esc(d.n)}</span>${l.docs.has(d.id) ? '<span class="chip ok">cargado</span>' : /opcional|si aplica|cuando aplique/i.test(d.n) ? '<span class="chip">opcional</span>' : '<span class="chip warn">pendiente</span>'}</label>`).join('')}</div></section>`;
+  const pct = Math.round(l.docs.size / docs.length * 100);
+  return `<div class="alert ${l.stage >= 5 ? 'info' : 'warn'}">${icon('file')}<div>El expediente digital se abre en <b>Cotización</b> y se cierra en <b>Entrega</b> (transversal). Avance ${pct}%. El recordatorio P21 se dispara si sigue incompleto después de X días.</div></div>
+  <div class="progress"><span style="width:${pct}%"></span></div>
+  ${block('Asesor de piso (APV)', apv)}${block('APV / F&I', fi)}`;
+}
+
+function tabActividad(l) {
+  return `<section class="card"><div class="card-h"><h3>Bitácora</h3><span class="small muted">Todo cambio queda auditado</span></div><div class="card-b timeline">
+  ${l.activity.slice().sort((a, b) => b.ts - a.ts).map(a => `<div class="tl done"><div class="b">${icon(a.who === 'Middleware' ? 'plug' : a.who === 'Sistema' ? 'cog' : 'user','sm')}</div><div><div>${a.txt}</div><div class="small muted">${esc(a.who)} · ${fmtDate(a.ts)}</div></div></div>`).join('')}</div></section>`;
+}
+
+/** Pestaña "Integraciones": cómo se ve este lead en el middleware y en los CRMs de marca. */
+function tabIntegraciones(l) {
+  const raw = l.raw_payload || MW.payload({ ...l, external_id: l.id.slice(0, 8), utm_source: l.utm_source });
+  return `
+  <section class="card"><div class="card-h"><h3>lead-capture-middleware</h3><span class="chip">GET /api/v1/leads/:id</span></div><div class="card-b">
+    <dl class="kv"><dt>lead_id</dt><dd class="mono">${l.id}</dd><dt>unique_contact_id</dt><dd class="mono">${l.unique_contact_id}</dd><dt>source</dt><dd>${esc(l.source)}</dd><dt>form_name → intent</dt><dd>${esc(l.form_name)} → <b>${l.intent}</b></dd></dl>
+  </div></section>
+  <section class="card table-wrap"><div class="card-h"><h3>crm_dispatches</h3><span class="small muted">Asíncrono · un registro por (lead_id, crm)</span></div>
+    <table class="t"><thead><tr><th>CRM</th><th>Estado</th><th>external_id</th><th>Intentos</th><th>Despachado</th><th>Error</th><th></th></tr></thead><tbody>
+    ${l.dispatches.map(d => `<tr><td><b>${d.crm}</b><div class="small muted">${d.crm === 'dynamics' ? 'cgspa_idleadfuentesexternas = lead_id' : 'contacto WhatsApp IA'}</div></td>
+      <td><span class="chip ${d.status === 'success' ? 'ok' : d.status === 'failed' ? 'err' : 'warn'}"><i class="dot ${d.status}"></i>${d.status}</span></td>
+      <td class="mono">${d.external_id ? esc(d.external_id.slice(0, 18)) + '…' : '—'}</td><td>${d.attempts}</td><td class="small">${d.dispatched_at ? fmtDate(d.dispatched_at) : '—'}</td><td class="small">${esc(d.last_error || '—')}</td>
+      <td>${d.status === 'failed' ? `<button class="btn sm secondary" data-action="retry" data-id="${l.id}" data-crm="${d.crm}">${icon('refresh','sm')}Reintentar</button>` : ''}</td></tr>`).join('')}
+    <tr><td><b>creatio</b></td><td><span class="chip"><i class="dot skipped"></i>no registrado</span></td><td colspan="5" class="small muted">Crm::CreatioDispatcher existe pero no está en DispatchLeadJob::DISPATCHERS (pendiente #8).</td></tr>
+    </tbody></table></section>
+  <div class="alert warn">${icon('alert')}<div><b>Cambios de etapa:</b> hoy <span class="mono">PATCH</span> no vuelve a despachar a los CRMs (pendiente #5). Los avances que se capturen en AT+ no llegarán a Dynamics/Vambe hasta definir un endpoint de sincronización.</div></div>
+  <section class="card"><div class="card-h"><h3>raw_payload</h3></div><div class="card-b"><div class="json">${esc(JSON.stringify(raw, null, 2))}</div></div></section>`;
+}
+
+/* ============================================================================
+   K. VISTA: RECEPCIÓN (Hostess) — check-in con folio de cita + walk-in
+   ============================================================================ */
+function viewRecepcion() {
+  const today = state.leads.filter(l => l.appt && isToday(l.appt.at) && l.appt.kind !== 'Entrega').sort((a, b) => a.appt.at - b.appt.at);
+  const inFloor = state.leads.filter(l => l.stage === 3 || (l.stage === 4 && Date.now() - l.created < 86400000));
+  return `
+  <div class="page-head"><div><h1>Recepción en piso</h1><p class="muted">Toques P1–P3: bienvenida, motivo de visita / registro y presentación del asesor asignado.</p></div>
+    <button class="btn" data-action="walkin">${icon('plus')}Registrar walk-in</button></div>
+  <section class="card"><div class="card-b" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+    <div class="field" style="flex:1;min-width:240px"><label>Folio de cita o teléfono</label><input class="input" id="code" placeholder="Ej. CITA-7Q4K o 5500…"></div>
+    <button class="btn dark" data-action="find-code">${icon('search')}Buscar y hacer check-in</button>
+  </div></section>
+  <div class="grid-2">
+    <section class="card"><div class="card-h"><h2>Citas de hoy</h2><span class="chip">${today.length}</span></div>
+      ${today.map(l => `<div class="task" data-action="open" data-id="${l.id}">${chIco('Presencial')}
+        <div><div class="task-t">${new Date(l.appt.at).toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' })} · ${esc(fullName(l))}</div>
+        <div class="task-m small"><span class="mono">${l.appt.code}</span><span>${esc(l.brand)} ${esc(l.model)}</span><span>BDC: ${esc(l.bdc)}</span></div></div>
+        ${l.appt.status === 'scheduled' ? `<button class="btn sm" data-action="checkin" data-id="${l.id}">Check-in</button>` : `<span class="chip ok">${icon('check','sm')}Llegó</span>`}</div>`).join('') || '<div class="empty">Sin citas hoy</div>'}
+    </section>
+    <section class="card"><div class="card-h"><h2>En piso ahora</h2></div>
+      ${inFloor.map(l => `<div class="task" data-action="open" data-id="${l.id}">${chIco('Presencial')}<div><div class="task-t">${esc(fullName(l))}</div>
+        <div class="task-m small"><span class="chip">${esc(l.category)}</span>${l.asesor ? `<span>Asesor: <b>${esc(l.asesor)}</b></span>` : '<span class="chip warn">Sin asesor</span>'}</div></div>${icon('arrow')}</div>`).join('') || '<div class="empty">Nadie en piso</div>'}
+    </section>
+  </div>`;
+}
+
+/* ============================================================================
+   L. VISTA: AGENDA — citas, pruebas de manejo y entregas
+   ============================================================================ */
+function viewAgenda() {
+  const ev = state.leads.filter(l => l.appt).sort((a, b) => a.appt.at - b.appt.at);
+  const days = [...new Set(ev.map(l => new Date(l.appt.at).toDateString()))];
+  return `<div class="page-head"><div><h1>Agenda</h1><p class="muted">Recordatorios D-1 y mismo día (C3, C4, P31, P32) se envían automáticamente por Vambe.</p></div></div>
+  ${days.map(d => `<section class="card"><div class="card-h"><h3>${new Date(d).toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long' })}</h3></div>
+    ${ev.filter(l => new Date(l.appt.at).toDateString() === d).map(l => `<div class="task" data-action="open" data-id="${l.id}">${chIco(l.appt.kind === 'Entrega' ? 'Administrativo' : 'Presencial')}
+      <div><div class="task-t">${new Date(l.appt.at).toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' })} · ${esc(l.appt.kind)} · ${esc(fullName(l))}</div>
+      <div class="task-m small"><span class="mono">${l.appt.code}</span><span>${esc(l.agency)}</span><span class="chip ${l.appt.status === 'no_show' ? 'err' : l.appt.status === 'checked_in' ? 'ok' : 'info'}">${{ scheduled:'Agendada', checked_in:'Llegó', no_show:'No asistió' }[l.appt.status]}</span></div></div>${icon('arrow')}</div>`).join('')}</section>`).join('')}`;
+}
+
+/* ============================================================================
+   M. VISTA: JOURNEY Y CADENCIAS — catálogo de los 74 toques
+   ============================================================================ */
+function viewJourney() {
+  const f = state.journeyFilter;
+  const T = DATA.touches.filter(t => (!f.stage || t.stage === f.stage) && (!f.channel || t.channel === f.channel) && (!f.src || t.src === f.src));
+  const uniq = k => [...new Set(DATA.touches.map(t => t[k]))];
+  const s = (name, arr, v, label) => `<select class="input" data-jfilter="${name}"><option value="">${label}</option>${arr.map(x => `<option ${v === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`;
+  return `<div class="page-head"><div><h1>Journey y cadencias</h1><p class="muted">74 toques consolidados de Contact Plan CDK, Touch Points Piso y reglas actuales de Creatio. Esta es la configuración que alimenta “Siguiente acción”.</p></div>
+    <div class="filters">${s('stage', uniq('stage'), f.stage, 'Todas las etapas')}${s('channel', uniq('channel'), f.channel, 'Todos los canales')}${s('src', uniq('src'), f.src, 'Todas las fuentes')}</div></div>
+  <div class="grid-3">${['Contact Plan CDK','Touch Points Piso','Creatio actual'].map(src => `<div class="card kpi"><b>${DATA.touches.filter(t => t.src === src).length}</b><span>${src}</span></div>`).join('')}</div>
+  <div style="display:flex;flex-direction:column;gap:8px">${T.map(t => `
+    <details class="touch"><summary><span class="tid">${esc(t.id)}</span><div><b>${esc(t.t)}</b><div class="small muted" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px"><span class="chip dark">${esc(t.stage)}</span><span class="chip">${esc(t.channel)}</span><span class="chip">${esc(t.src)}</span><span class="chip ${t.brand === 'Multimarca' ? '' : 'info'}">${esc(t.brand)}</span></div></div><span class="small muted" style="max-width:260px;text-align:right">${esc(t.when)}</span></summary>
+      <div class="tb">${['Momento / condición','Objetivo','CTA / salida','Guión / llamada','Mensaje / plantilla'].filter(k => t[k]).map(k => `<div><b>${k}</b><div class="${k.startsWith('Mensaje') || k.startsWith('Guión') ? 'script' : ''}">${esc(t[k])}</div></div>`).join('')}</div></details>`).join('')}</div>`;
+}
+
+/* ============================================================================
+   N. VISTA: DICCIONARIO DE CAMPOS — matriz 199 campos × etapas × rol
+   ============================================================================ */
+function viewCampos() {
+  const ff = state.fieldFilter;
+  const cols = ['Nuevo','En Contacto','Cita Prog.','En Recepción','Atendido','Apartado','Prueba manejo','Cotización','Pedido','Facturación','Entrega'];
+  const F = DATA.fields.filter(f => (!ff.mod || f.m === ff.mod) && (!ff.role || Object.values(f.s).flat().some(r => r.startsWith(ff.role))) && (!ff.q || (f.id + ' ' + f.n).toLowerCase().includes(ff.q.toLowerCase())));
+  const noStage = DATA.fields.filter(f => !Object.keys(f.s).length).length;
+  return `<div class="page-head"><div><h1>Diccionario de campos</h1><p class="muted">${DATA.fields.length} campos en ${Object.keys(DATA.mods).length} módulos · ${noStage} sin etapa asignada. Fuente: matriz del journey.</p></div>
+    <div class="filters">
+      <input class="input" style="width:200px;height:34px" placeholder="Buscar campo…" data-ffilter="q" value="${esc(ff.q)}">
+      <select class="input" data-ffilter="mod"><option value="">Todos los módulos</option>${Object.entries(DATA.mods).map(([k, v]) => `<option value="${k}" ${ff.mod === k ? 'selected' : ''}>${esc(v.slice(0, 40))}</option>`).join('')}</select>
+      <select class="input" data-ffilter="role"><option value="">Todos los roles</option>${['BDC','Hostess','APV','F&I','Sistema','Gerencia'].map(r => `<option ${ff.role === r ? 'selected' : ''}>${r}</option>`).join('')}</select>
+    </div></div>
+  <section class="card table-wrap" style="max-height:70vh"><table class="t matrix"><thead><tr><th>ID</th><th>Campo</th><th>Módulo</th>${cols.map((c, i) => `<th class="c ${i === 5 || i === 6 ? 'tvh' : ''}">${c}</th>`).join('')}</tr></thead>
+    <tbody>${F.map(f => `<tr><td class="mono">${f.id}</td><td>${esc(f.n)}</td><td class="small muted">${esc(DATA.mods[f.m].slice(0, 26))}</td>${cols.map((_, i) => `<td class="c ${i === 5 || i === 6 ? 'tvh' : ''}">${(f.s[i] || []).map(r => `<span class="role ${roleCls(r)} ${r.includes('lectura') ? 'ro' : ''}" title="${esc(r)}">${esc(r.replace(' (lectura)', '').slice(0, 4))}</span>`).join(' ')}</td>`).join('')}</tr>`).join('')}</tbody></table></section>`;
+}
+
+/* ============================================================================
+   O. VISTA: INTEGRACIONES — monitor del middleware y contratos
+   ============================================================================ */
+function viewIntegraciones() {
+  const D = state.leads.flatMap(l => l.dispatches.map(d => ({ ...d, l })));
+  const by = (crm, st) => D.filter(d => d.crm === crm && d.status === st).length;
+  return `<div class="page-head"><div><h1>Integraciones</h1><p class="muted">AT+ es una fuente y un destino más del <span class="mono">lead-capture-middleware</span>; los CRMs de marca siguen recibiendo cada lead.</p></div></div>
+  <div class="grid-3">${['dynamics','vambe'].map(c => `<div class="card kpi"><b>${by(c, 'success')}<span class="muted" style="font-size:14px"> / ${D.filter(d => d.crm === c).length}</span></b><span>${c} · éxito ${by(c, 'failed') ? `· <b style="color:var(--error)">${by(c, 'failed')} fallidos</b>` : ''} ${by(c, 'pending') ? `· ${by(c, 'pending')} pendientes` : ''}</span></div>`).join('')}
+    <div class="card kpi"><b style="color:var(--gray)">—</b><span>creatio · dispatcher no registrado (pendiente #8)</span></div></div>
+  <div class="grid-2">
+    <section class="card table-wrap"><div class="card-h"><h3>Despachos recientes</h3></div><table class="t"><thead><tr><th>Lead</th><th>CRM</th><th>Estado</th><th>Error</th><th></th></tr></thead><tbody>
+      ${D.sort((a, b) => (a.status === 'failed' ? -1 : 0) - (b.status === 'failed' ? -1 : 0)).slice(0, 14).map(d => `<tr class="click" data-action="open" data-id="${d.l.id}"><td>${esc(fullName(d.l))}<div class="small muted mono">${d.l.id.slice(0, 8)}…</div></td><td>${d.crm}</td><td><span class="chip ${d.status === 'success' ? 'ok' : d.status === 'failed' ? 'err' : 'warn'}">${d.status}</span></td><td class="small">${esc(d.last_error || '—')}</td><td>${d.status === 'failed' ? `<button class="btn sm secondary" data-action="retry" data-id="${d.l.id}" data-crm="${d.crm}">Reintentar</button>` : ''}</td></tr>`).join('')}
+    </tbody></table></section>
+    <section class="card"><div class="card-h"><h3>Contratos que usa AT+</h3></div><div class="card-b small" style="display:flex;flex-direction:column;gap:8px">
+      ${[
+        ['POST','/webhooks/at_plus','Crear lead (walk-in, manual). Propuesta opción B; mientras tanto /webhooks/creatio.','warn'],
+        ['GET','/api/v1/leads/:id','Polling de crm_dispatches (5 s → 30 s → 2 min).',''],
+        ['POST','/api/v1/appointments','Cita → confirmation_code para check-in.',''],
+        ['POST','/api/v1/appointments/:code/check_in','Llegada en recepción (checked_in_by).',''],
+        ['POST','/api/v1/vambe_messages','Plantillas de cadencia → 202 + relay.',''],
+        ['POST','/api/v1/cotizations/external','Toma de auto a cuenta (precio referencial).',''],
+        ['IN','Crm::AtPlusDispatcher','Recibir en AT+ los leads de todas las fuentes. No existe: requiere desarrollo.','err'],
+      ].map(([m, p, d, s]) => `<div style="display:grid;grid-template-columns:44px 1fr;gap:8px"><span class="chip ${s || 'dark'}">${m}</span><div><span class="mono">${p}</span><div class="muted">${d}</div></div></div>`).join('')}
+    </div></section>
+  </div>
+  <section class="card"><div class="card-h"><h3>Pendientes del middleware que afectan al CRM</h3></div><div class="card-b" style="display:grid;gap:8px">
+    ${[['err','Sin webhooks salientes: AT+ debe hacer polling o pedir un dispatcher propio para recibir leads.'],['err','PATCH no re-despacha: los avances de etapa no llegan a Dynamics/Vambe.'],['warn','Sin idempotencia por ID externo: reintentar solo ante errores de red/5xx y si no hay lead_id.'],['warn','GET /api/v1/leads/:id sin autenticación: puede cerrarse con API key.'],['warn','Dynamics: cgspa_tipodenegocio fijo para todos los intents.'],['info','Base URL de UAT/Producción pendiente con TI; API key en gestor de secretos, nunca en el frontend.']]
+      .map(([k, t]) => `<div class="alert ${k}">${icon(k === 'info' ? 'plug' : 'alert')}<div>${t}</div></div>`).join('')}
+  </div></section>`;
+}
+
+/* ============================================================================
+   P. MODALES (nuevo lead, walk-in, cita, toma)
+   ============================================================================ */
+function modal(title, body, foot) {
+  $('#modal').innerHTML = `<div class="modal-bg" data-action="close-bg"><div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
+    <div class="modal-h"><h2>${esc(title)}</h2><button class="icon-btn" data-action="close" aria-label="Cerrar">${icon('x')}</button></div>
+    <div class="modal-b">${body}</div><div class="modal-f">${foot}</div></div></div>`;
+}
+const closeModal = () => { $('#modal').innerHTML = ''; };
+
+/** Formulario "Nuevo lead". walkin=true lo usa la Hostess (entra directo a En Recepción). */
+function openNewLead(walkin = false) {
+  const brandOpts = Object.keys(BRANDS).map(b => `<option>${b}</option>`).join('');
+  modal(walkin ? 'Registrar walk-in' : 'Nuevo lead', `
+    ${walkin ? `<div class="alert info">${icon('door')}<div>Toque P2: motivo de visita y registro. Se crea el lead con fuente <span class="mono">at_plus_piso</span> y entra directo a <b>En Recepción</b>.</div></div>` : ''}
+    <div class="section-t">Contacto</div>
+    <div class="form-grid">
+      <div class="field"><label>Nombre(s) *</label><input class="input" name="first" placeholder="Ej: Juan Carlos"></div>
+      <div class="field"><label>Apellidos</label><input class="input" name="last" placeholder="Ej: Pérez López"></div>
+      <div class="field"><label>Teléfono (10 dígitos)</label><input class="input" name="phone" inputmode="tel" placeholder="55 0000 0000"></div>
+      <div class="field"><label>Correo</label><input class="input" name="email" type="email" placeholder="nombre@example.com"></div>
+      <div class="full hint" id="contact-hint">Captura al menos teléfono o correo. Sin ninguno, el middleware descarta el lead (200 ignored).</div>
+    </div>
+    <div class="section-t">Vehículo de interés</div>
+    <div class="form-grid">
+      <div class="field"><label>Marca *</label><select class="input" name="brand" data-action="brand-change">${brandOpts}</select></div>
+      <div class="field"><label>Modelo *</label><select class="input" name="model">${BRANDS.KIA.map(m => `<option>${m}</option>`).join('')}</select></div>
+      <div class="field"><label>Año</label><select class="input" name="year"><option>2026</option><option>2025</option></select></div>
+      <div class="field"><label>Versión</label><input class="input" name="version" placeholder="Opcional"></div>
+    </div>
+    <div class="section-t">Origen</div>
+    <div class="form-grid">
+      ${walkin ? `
+      <div class="field"><label>Categoría CDK *</label><select class="input" name="category"><option>Fresh Up</option><option>Be Back</option></select></div>
+      <div class="field"><label>Asesor asignado (turno)</label><select class="input" name="asesor">${FLOOR_AGENTS.map(a => `<option>${a}</option>`).join('')}</select></div>
+      <div class="field full"><label>¿Por qué medio se enteró de nosotros? (F018)</label><select class="input" name="need"><option>Pasaba por la agencia</option><option>Redes sociales</option><option>Recomendación</option><option>Sitio web</option></select></div>` : `
+      <div class="field"><label>Fuente *</label><select class="input" name="source">${SOURCES.map(s => `<option ${s === 'web_form' ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+      <div class="field"><label>Formulario (form_name) *</label><select class="input" name="form_name" data-action="form-change">${Object.keys(FORM_INTENT).filter(k => !k.startsWith('PISO')).map(k => `<option>${k}</option>`).join('')}</select><span class="hint">lead_intent: <b id="intent">inquiry</b></span></div>
+      <div class="field"><label>ID externo (source_id)</label><input class="input" name="external_id" placeholder="Para reconciliar"></div>
+      <div class="field"><label>utm_source</label><input class="input" name="utm_source" placeholder="google, facebook…"></div>`}
+    </div>
+    <div id="dupe"></div>
+    <details><summary class="small" style="cursor:pointer;font-weight:600">Ver payload que se enviará al middleware</summary><div class="json" id="payload" style="margin-top:8px"></div></details>`,
+    `<span class="small muted" style="margin-right:auto">Datos ficticios · no captures PII real en pruebas</span><button class="btn ghost" data-action="close">Cancelar</button><button class="btn" data-action="save-lead" data-walkin="${walkin ? 1 : 0}">${walkin ? 'Registrar y asignar' : 'Crear lead'}</button>`);
+  updateLeadPreview();
+}
+/** Recalcula payload, intent y posible duplicado mientras el usuario escribe. */
+function formData() { const o = {}; document.querySelectorAll('#modal [name]').forEach(i => o[i.name] = i.value.trim()); return o; }
+function updateLeadPreview() {
+  const f = formData(); if (!f.brand) return;
+  if (!f.source) { f.source = 'at_plus_piso'; f.form_name = 'PISO - WALK IN'; }
+  const p = MW.payload(f);
+  const pay = $('#payload'); if (pay) pay.textContent = 'POST /webhooks/at_plus\nAuthorization: Bearer ••••••• (gestor de secretos)\n\n' + JSON.stringify(p, null, 2);
+  const it = $('#intent'); if (it) it.textContent = FORM_INTENT[f.form_name] || 'inquiry';
+  const hint = $('#contact-hint'); if (hint) { const bad = !p.phone && !p.email; hint.className = 'full hint ' + (bad ? 'err' : ''); }
+  const m = state.leads.find(l => (p.phone && l.phone === p.phone) || (p.email && l.email === p.email));
+  $('#dupe').innerHTML = m ? `<div class="alert warn">${icon('users')}<div>Contacto existente: <b>${esc(fullName(m))}</b> · ${state.leads.filter(x => x.unique_contact_id === m.unique_contact_id).length} lead(s) previos. Se creará un lead nuevo ligado al mismo <span class="mono">unique_contact_id</span>.</div></div>` : '';
+}
+
+function openAppt(l) {
+  const d = new Date(Date.now() + 86400000); d.setHours(11, 0, 0, 0);
+  const local = new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  modal('Agendar cita', `
+    <div class="form-grid">
+      <div class="field"><label>Fecha y hora (F089) *</label><input class="input" type="datetime-local" name="at" value="${local}"></div>
+      <div class="field"><label>Tipo</label><select class="input" name="kind"><option>Visita</option><option>Videollamada</option><option>Prueba de manejo</option><option>Entrega</option></select></div>
+      <div class="field"><label>Agencia</label><input class="input" value="${esc(l.agency)}" readonly></div>
+      <div class="field"><label>Asesor de sucursal (F017)</label><select class="input" name="asesor">${FLOOR_AGENTS.map(a => `<option>${a}</option>`).join('')}</select></div>
+      <label class="small full" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="pm" checked> Ofrecer prueba de manejo (F090)</label>
+      <label class="small full" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="loc" checked> Enviar ubicación de la agencia (F092)</label>
+    </div>
+    <div class="alert info">${icon('chat')}<div>Al guardar: <span class="mono">POST /api/v1/appointments</span> genera el folio y se envía la confirmación C2 por Vambe + correo. Los recordatorios D-1 (C3) y mismo día (C4) ya están automatizados.</div></div>`,
+    `<button class="btn ghost" data-action="close">Cancelar</button><button class="btn" data-action="save-appt" data-id="${l.id}">Agendar y confirmar</button>`);
+}
+
+/* ============================================================================
+   Q. ACCIONES (delegación de eventos)
+   ============================================================================ */
+function toast(msg, kind = 'ok') {
+  const el = document.createElement('div'); el.className = 'toast ' + kind;
+  el.innerHTML = icon(kind === 'ok' ? 'check' : 'alert') + `<span>${msg}</span>`;
+  $('#toasts').appendChild(el); setTimeout(() => el.remove(), 3800);
+}
+const log = (l, txt, who) => l.activity.push({ ts: Date.now(), who: who || ROLES.find(r => r.key === state.role).user, txt });
+const getLead = id => state.leads.find(l => l.id === id);
+function go(view, extra = {}) { Object.assign(state, { view }, extra); render(); window.scrollTo(0, 0); }
+
+/** Mueve un lead de etapa, avisando si faltan campos del rol activo. */
+function moveStage(l, to) {
+  if (to === l.stage) return;
+  const c = completion(l); c.pct = c.pct ?? 100;
+  const from = STAGES[l.stage].name;
+  l.stage = to;
+  if (to >= 2) l.cadenceOutcome = 'contactado';
+  log(l, `Etapa <b>${esc(from)}</b> → <b>${esc(STAGES[to].name)}</b>${c.pct < 100 ? ` · ${c.total - c.done} campos sin capturar` : ''}`);
+  toast(`${esc(fullName(l))} → ${esc(STAGES[to].name)}${c.pct < 100 ? ` · faltan ${c.total - c.done} campos` : ''}`, c.pct < 100 ? 'err' : 'ok');
+}
+
+const ACTIONS = {
+  go: (d) => go(d.view, d.view === 'leads' ? {} : {}),
+  role: (d) => { state.role = d.role; state.view = ROLES.find(r => r.key === d.role).home; render(); toast(`Vista de ${d.role}`); },
+  open: (d) => go('lead', { leadId: d.id, leadTab: 'accion', captureScope: 'stage' }),
+  tab: (d) => { state.leadTab = d.tab; render(); },
+  scope: (d) => { state.captureScope = d.scope; render(); },
+  mod: (d, el) => el.closest('.mod').classList.toggle('closed'),
+  'new-lead': () => openNewLead(false),
+  walkin: () => openNewLead(true),
+  close: () => closeModal(),
+  'close-bg': (d, el, ev) => { if (ev.target === el) closeModal(); },
+  advance: (d) => { const l = getLead(d.id); moveStage(l, l.stage + 1); render(); },
+  jump: (d) => { const l = getLead(d.id); moveStage(l, +d.stage); render(); },
+  /** Transversal: vacío → en curso → completo → vacío */
+  tv: (d) => { const l = getLead(d.id); const cur = l.tv[d.tv]; l.tv[d.tv] = cur === '' ? 'on' : cur === 'on' ? 'ok' : ''; const t = TRANSVERSALS.find(x => x.key === d.tv); log(l, `Transversal <b>${t.name}</b>: ${l.tv[d.tv] === 'ok' ? 'completo' : l.tv[d.tv] ? 'en curso' : 'sin iniciar'}`); if (l.tv[d.tv] === 'on') { state.leadTab = 'captura'; state.captureScope = d.tv === 'exp' ? 'stage' : d.tv; if (d.tv === 'exp') state.leadTab = 'expediente'; } render(); },
+  /** Resultado de una llamada de la cadencia */
+  outcome: (d) => {
+    const l = getLead(d.id), a = nextAction(l); l.done.add(a.touch.key);
+    // ¿El toque actual pertenece a la cadencia de 35 días? (los de No Show / piso no avanzan la cadencia)
+    const isCad = CADENCE[l.cadenceIdx]?.touch?.key === a.touch.key;
+    if (d.out === 'contactado' && a.touch.id.startsWith('NS')) {
+      log(l, `${a.touch.id} No show: <b>contactado</b> → reagendar`); render(); toast('Cliente localizado: reagenda la cita'); return openAppt(l);
+    }
+    if (d.out === 'contactado') {
+      l.cadenceOutcome = 'contactado'; if (l.stage === 0) l.stage = 1;
+      if ((Date.now() - l.created) / 60000 <= 10) l.fields.F069 = 'Sí';
+      log(l, `${a.touch.id} llamada: <b>contactado</b>`); toast('Contacto efectivo. Siguiente: diferenciadores de marca (L20) y cita.');
+    } else if (d.out === 'no_contesta') {
+      if (isCad) l.cadenceIdx++;
+      if (l.stage === 0) l.stage = 1;
+      const nx = nextAction(l);
+      log(l, `${a.touch.id} llamada: <b>no contesta</b>${nx?.touch ? ` → siguiente toque ${nx.touch.id}` : ''}`); toast(`Registrado. Siguiente: ${nx?.touch?.t || nx?.label || 'fin de ciclo'}`);
+    } else { l.status = 'descartado'; log(l, 'Número equivocado → <b>Descartado</b>'); toast('Lead descartado', 'err'); }
+    render();
+  },
+  'send-wa': (d) => {
+    const l = getLead(d.id), t = DATA.touches[+d.touch]; const r = MW.sendVambe(l, t); l.done.add(t.key);
+    if (CADENCE[l.cadenceIdx]?.touch?.key === t.key) l.cadenceIdx++;
+    if (t.id === 'L20') { ['F070','F071','F072'].forEach(k => l.fields[k] = 'Sí'); }
+    log(l, `Plantilla Vambe <b>${t.id}</b> enviada (relay ${r.relay.id.slice(0, 8)}, HTTP 202)`); toast(`Plantilla ${t.id} enviada a Vambe (202 Accepted)`); render();
+  },
+  done: (d) => { const l = getLead(d.id), t = DATA.touches[+d.touch]; l.done.add(t.key); if (CADENCE[l.cadenceIdx]?.touch?.key === t.key) l.cadenceIdx++; log(l, `Toque <b>${t.id}</b> realizado`); toast(`${t.id} marcado como realizado`); render(); },
+  discard: (d) => { const l = getLead(d.id); l.status = 'descartado'; l.done.add(CADENCE[18].touch.key); log(l, 'Fin del ciclo de 35 días → <b>Descartado/Retenido</b> (L19)'); toast('Lead descartado; sale del journey', 'err'); render(); },
+  'log-call': (d) => { const l = getLead(d.id); log(l, `Llamada manual a ${esc(l.phone)}`); toast(`Marcando a ${esc(l.phone)}… (click-to-call simulado)`); render(); },
+  'wa-free': (d) => { const l = getLead(d.id); MW.sendVambe(l, null); log(l, 'Mensaje libre por Vambe'); toast('Mensaje enviado a Vambe (202)'); render(); },
+  appt: (d) => openAppt(getLead(d.id)),
+  'save-appt': (d) => {
+    const l = getLead(d.id), f = formData(); const at = new Date(f.at).getTime();
+    const r = MW.createAppointment(l, at, f.kind); l.asesor = f.asesor; l.fields.F017 = f.asesor; l.fields.F089 = f.at; l.fields.F095 = r.confirmation_code;
+    if (l.stage < 2) l.stage = 2; l.cadenceOutcome = 'contactado';
+    const c2 = DATA.touches.find(t => t.id === 'C2'); l.done.add(c2.key); MW.sendVambe(l, c2);
+    log(l, `Cita <b>${r.confirmation_code}</b> agendada ${fmtDate(at)} · confirmación C2 enviada`); closeModal(); toast(`Cita ${r.confirmation_code} agendada y confirmada por Vambe`); render();
+  },
+  checkin: (d) => {
+    const l = getLead(d.id); if (!l.appt) return; MW.checkIn(l, ROLES[1].user);
+    l.stage = Math.max(l.stage, 3); ['P1','P2'].forEach(id => DATA.touches.filter(t => t.id === id).forEach(t => l.done.add(t.key)));
+    l.fields.F008 = l.fields.F008 || 'Sí'; log(l, `Check-in con folio <b>${l.appt.code}</b> (POST …/check_in)`); toast(`${esc(fullName(l))} llegó · asigna asesor`); go('lead', { leadId: l.id, leadTab: 'accion' });
+  },
+  'find-code': () => {
+    const v = ($('#code').value || '').trim().toUpperCase(); const ph = normPhone(v);
+    const l = state.leads.find(x => (x.appt && x.appt.code === v) || (ph && x.phone === ph));
+    if (!l) return toast('No se encontró la cita. Registra como walk-in.', 'err');
+    if (l.appt && l.appt.status === 'scheduled') ACTIONS.checkin({ id: l.id }); else go('lead', { leadId: l.id });
+  },
+  assign: (d) => { const l = getLead(d.id); l.asesor = d.asesor; l.fields.F017 = d.asesor; DATA.touches.filter(t => t.id === 'P3').forEach(t => l.done.add(t.key)); moveStage(l, 4); log(l, `Asesor asignado: <b>${esc(d.asesor)}</b> (P3)`); render(); },
+  doc: (d, el) => { const l = getLead(d.id); el.checked ? l.docs.add(d.doc) : l.docs.delete(d.doc); if (!l.tv.exp) l.tv.exp = 'on'; if (l.docs.size === 41) l.tv.exp = 'ok'; render(); },
+  yn: (d) => { const l = getLead(d.id); l.fields[d.field] = l.fields[d.field] === d.val ? '' : d.val; render(); },
+  allfields: (d, el) => { state.showAllFields = el.checked; render(); },
+  retry: (d) => { const l = getLead(d.id); MW.dispatch(l, d.crm); log(l, `Reintento de despacho a <b>${d.crm}</b>`, 'Sistema'); toast(`Reintentando ${d.crm}…`); render(); },
+  tradein: (d) => {
+    const l = getLead(d.id); const r = MW.quoteTradeIn({ year: l.fields.F086 || '2021', km: l.fields.F087 || 60000 });
+    l.fields.F088 = 'Sí'; log(l, `Cotización de toma (referencial): $${r.min.toLocaleString('es-MX')} – $${r.max.toLocaleString('es-MX')}`);
+    toast(`Toma referencial: $${r.min.toLocaleString('es-MX')} – $${r.max.toLocaleString('es-MX')}. Validar con Ventas.`); render();
+  },
+  'save-lead': (d) => {
+    const f = formData(); const walkin = d.walkin === '1';
+    if (!f.first) return toast('El nombre es obligatorio', 'err');
+    if (walkin) Object.assign(f, { source: 'at_plus_piso', form_name: 'PISO - WALK IN', stage: 3 });  // entra a En Recepción; avanzar = Atendido
+    const r = MW.createLead(f);
+    if (r.body.status === 'ignored') return toast('Sin teléfono ni correo: el middleware lo ignoraría. Captura al menos uno.', 'err');
+    if (walkin) { r.lead.bdc = '—'; r.lead.cadenceOutcome = 'contactado'; DATA.touches.filter(t => ['P1','P2','P3'].includes(t.id) && t.stage === 'En Recepción').forEach(t => r.lead.done.add(t.key)); log(r.lead, `Walk-in registrado por hostess · asesor <b>${esc(f.asesor)}</b>`); }
+    closeModal(); toast(`Lead creado · lead_id ${r.body.lead_id.slice(0, 8)}… (201). Despachando a CRMs…`);
+    go('lead', { leadId: r.lead.id, leadTab: walkin ? 'captura' : 'accion', captureScope: 'stage' });
+  },
+};
+
+document.addEventListener('click', ev => {
+  const el = ev.target.closest('[data-action]'); if (!el) return;
+  // Evita que el click en un botón dentro de una fila clickeable abra también la ficha
+  if (el.tagName !== 'INPUT' && el.dataset.action !== 'close-bg') ev.stopPropagation();
+  const fn = ACTIONS[el.dataset.action]; if (fn && !(el.tagName === 'SELECT')) fn(el.dataset, el, ev);
+});
+document.addEventListener('change', ev => {
+  const el = ev.target;
+  if (el.dataset.filter) { state.filters[el.dataset.filter] = el.value; render(); }
+  if (el.dataset.jfilter) { state.journeyFilter[el.dataset.jfilter] = el.value; render(); }
+  if (el.dataset.ffilter && el.tagName === 'SELECT') { state.fieldFilter[el.dataset.ffilter] = el.value; render(); }
+  if (el.dataset.field) { const l = getLead(el.dataset.id); l.fields[el.dataset.field] = el.value; if (el.dataset.field === 'F021') l.temp = el.value; render(); }
+  if (el.dataset.action === 'brand-change') { $('#modal [name=model]').innerHTML = BRANDS[el.value].map(m => `<option>${m}</option>`).join(''); }
+  if ($('#modal').innerHTML) updateLeadPreview();
+});
+document.addEventListener('input', ev => {
+  const el = ev.target;
+  if (el.id === 'q') { state.q = el.value; if (!['leads','pipeline'].includes(state.view)) state.view = 'leads'; render(); const q = $('#q'); q.focus(); }
+  if (el.dataset.ffilter === 'q') { state.fieldFilter.q = el.value; render(); const i = document.querySelector('[data-ffilter=q]'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+  if (el.closest('#modal')) updateLeadPreview();
+});
+document.addEventListener('keydown', ev => { if (ev.key === 'Escape') closeModal(); });
+// Drag & drop del pipeline
+document.addEventListener('dragstart', ev => { const c = ev.target.closest('[data-drag]'); if (c) ev.dataTransfer.setData('text/plain', c.dataset.drag); });
+document.addEventListener('dragover', ev => { const c = ev.target.closest('[data-drop]'); if (c) { ev.preventDefault(); c.classList.add('drop'); } });
+document.addEventListener('dragleave', ev => { const c = ev.target.closest('[data-drop]'); if (c) c.classList.remove('drop'); });
+document.addEventListener('drop', ev => { const c = ev.target.closest('[data-drop]'); if (!c) return; ev.preventDefault(); const l = getLead(ev.dataTransfer.getData('text/plain')); if (l) { moveStage(l, +c.dataset.drop); render(); } });
+// Reloj: refresca los contadores de SLA cada 30 s en las vistas de cola
+setInterval(() => { if (['home','leads','pipeline'].includes(state.view) && !$('#modal').innerHTML && document.activeElement?.id !== 'q') render(); }, 30000);
+
+/* ============================================================================
+   R. ARRANQUE
+   ============================================================================ */
+seed();
+render();
+</script>
+</body>
+</html>
